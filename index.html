@@ -369,7 +369,7 @@
   <div class="view" id="view-orderHistory">
     <h2 style="margin-bottom:18px;">Order History</h2>
     <div class="oh-search">
-      <input type="text" id="ohSearch" placeholder="Search by name or contact number...">
+      <input type="search" id="ohSearch" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search by name or contact number...">
     </div>
     <div id="ohList"></div>
   </div>
@@ -1191,6 +1191,8 @@ async function fetchAllBillsRecent(){
   return bills;
 }
 async function renderOrderHistory(){
+  const searchBox = document.getElementById("ohSearch");
+  searchBox.value = "";
   const listEl = document.getElementById("ohList");
   listEl.innerHTML = `<div class="empty-note">Loading...</div>`;
   allBillsCache = await fetchAllBillsRecent();
@@ -1201,11 +1203,16 @@ document.getElementById("ohSearch").addEventListener("input", e=>{
   const q = e.target.value.trim().toLowerCase();
   const filtered = !q ? allBillsCache : allBillsCache.filter(b=>
     (b.customerName||"").toLowerCase().includes(q) || (b.contact||"").includes(q));
-  paintOrderHistory(filtered);
+  paintOrderHistory(filtered, q);
 });
-function paintOrderHistory(bills){
+function paintOrderHistory(bills, activeQuery){
   const listEl = document.getElementById("ohList");
-  if (!bills.length){ listEl.innerHTML = `<div class="empty-note">No orders found.</div>`; return; }
+  if (!bills.length){
+    listEl.innerHTML = activeQuery
+      ? `<div class="empty-note">No orders match "${escapeHtml(activeQuery)}". All ${allBillsCache.length} orders are still saved — clear the search to see them.</div>`
+      : `<div class="empty-note">No orders found.</div>`;
+    return;
+  }
   listEl.innerHTML = "";
   bills.forEach(b=>{
     const d = b.createdAt.toDate();
