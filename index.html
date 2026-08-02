@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Heebee Event POS</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;500;600&family=Space+Mono:wght@400;700&family=Nunito+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2ece0; --bg2:#faf7f0; --card:#ede6d4;
+    --border:#ddd3ba; --border2:rgba(0,0,0,0.08);
+    --text:#241f18; --text2:#4a4235; --text3:#8a8270;
+    --green:#7c8a50; --green-dark:#5f6b3c; --green-fg:#faf7f0;
+    --btn-bg:#221c14; --btn-fg:#faf7f0;
+    --danger:#a8552f; --danger-bg:#f7e9df;
+    --shadow:0 2px 10px rgba(30,25,15,0.06); --shadow2:0 8px 30px rgba(30,25,15,0.12);
+    --r:14px; --r2:20px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Nunito Sans',system-ui,sans-serif; font-weight:400;
+    -webkit-font-smoothing:antialiased; min-height:100vh; padding-bottom:60px;
+  }
+  h1,h2,h3{margin:0; font-family:'Fraunces',serif; font-weight:500;}
+  input,select,button,textarea{font-family:inherit; -webkit-appearance:none; appearance:none;}
+  input[type=radio],input[type=checkbox]{-webkit-appearance:auto; appearance:auto; width:auto; height:auto;}
+  button{cursor:pointer;}
+  .mono{font-family:'Space Mono',monospace;}
+  .label{font-family:'Space Mono',monospace; font-size:0.62rem; letter-spacing:2.5px; text-transform:uppercase; color:var(--text3);}
+
+  /* ---------- topnav ---------- */
+  .topnav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px; border-bottom:1px solid var(--border2); background:var(--bg2);
+    flex-wrap:wrap; gap:12px;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:34px;height:34px;border-radius:50%;background:var(--btn-bg);display:flex;align-items:center;justify-content:center;color:var(--green-fg);font-family:'Fraunces',serif;font-size:1rem;}
+  .brand-text .name{font-size:1.05rem; letter-spacing:1px; text-transform:uppercase;}
+  .brand-text .sub{font-size:0.6rem; letter-spacing:2px; color:var(--text3); font-family:'Space Mono',monospace; text-transform:uppercase;}
+  .navtabs{display:flex; gap:6px; flex-wrap:wrap;}
+  .navtab{
+    padding:9px 16px; border-radius:60px; border:1px solid var(--border);
+    background:var(--card); color:var(--text2); font-size:0.72rem; letter-spacing:1px;
+    text-transform:uppercase; font-weight:600; transition:all .2s;
+  }
+  .navtab:hover{background:var(--bg2);}
+  .navtab.active{background:var(--btn-bg); color:var(--btn-fg); border-color:var(--btn-bg);}
+
+  .wrap{max-width:1300px; margin:0 auto; padding:24px 28px;}
+  .view{display:none;}
+  .view.active{display:block; animation:reveal .35s ease forwards;}
+  @keyframes reveal{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ---------- start screen ---------- */
+  .start-shell{min-height:70vh; display:flex; align-items:center; justify-content:center;}
+  .start-card{
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2);
+    box-shadow:var(--shadow2); padding:44px 40px; width:100%; max-width:420px; text-align:center;
+  }
+  .start-card h1{font-size:1.6rem; margin-bottom:4px;}
+  .start-card .tag{font-size:0.65rem; letter-spacing:3px; color:var(--text3); font-family:'Space Mono',monospace; text-transform:uppercase; margin-bottom:28px; display:block;}
+  .field{text-align:left; margin-bottom:16px;}
+  .field label{display:block; margin-bottom:6px;}
+  .field input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:0.9rem;
+  }
+  .field input:focus{outline:none; border-color:var(--green);}
+  .btn{
+    padding:13px 20px; border-radius:10px; border:none; font-weight:600;
+    font-size:0.8rem; letter-spacing:1.5px; text-transform:uppercase; transition:transform .15s, opacity .15s;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-dark{background:var(--btn-bg); color:var(--btn-fg);}
+  .btn-dark:hover{opacity:0.88;}
+  .btn-outline{background:transparent; border:1px solid var(--border); color:var(--text2);}
+  .btn-outline:hover{background:var(--card);}
+  .btn-green{background:var(--green); color:var(--green-fg);}
+  .btn-danger{background:transparent; border:1px solid var(--danger); color:var(--danger);}
+  .btn-block{width:100%;}
+  .btn:disabled{opacity:0.4; cursor:not-allowed;}
+  .start-actions{display:flex; flex-direction:column; gap:10px; margin-top:22px;}
+  .or-sep{display:flex; align-items:center; gap:10px; margin:18px 0; color:var(--text3); font-size:0.65rem; letter-spacing:2px; font-family:'Space Mono',monospace;}
+  .or-sep::before,.or-sep::after{content:''; flex:1; height:1px; background:var(--border);}
+
+  /* ---------- billing view ---------- */
+  .billing-grid{display:grid; grid-template-columns:1fr 380px; gap:24px; align-items:start;}
+  @media(max-width:900px){.billing-grid{grid-template-columns:1fr;}}
+  .section-block{margin-bottom:26px;}
+  .section-pill{
+    display:inline-block; background:var(--green); color:var(--green-fg); font-size:0.65rem;
+    letter-spacing:2px; text-transform:uppercase; font-family:'Space Mono',monospace;
+    padding:5px 12px; border-radius:6px; margin-bottom:10px;
+  }
+  .item-row{
+    display:flex; align-items:center; justify-content:space-between; padding:12px 0;
+    border-bottom:1px solid var(--border2); gap:10px;
+  }
+  .item-info .name{font-weight:600; font-size:0.9rem;}
+  .item-info .desc{font-size:0.76rem; color:var(--text3); margin-top:2px;}
+  .item-right{display:flex; align-items:center; gap:16px; flex-shrink:0;}
+  .item-price{font-family:'Space Mono',monospace; font-size:0.85rem; min-width:60px; text-align:right;}
+  .qtystep{display:flex; align-items:center; gap:8px;}
+  .qtybtn{
+    width:28px; height:28px; border-radius:8px; border:1px solid var(--border);
+    background:var(--btn-bg); color:var(--btn-fg); font-size:1rem; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .qtybtn.plain{background:var(--card); color:var(--text);}
+  .qtyval{min-width:16px; text-align:center; font-family:'Space Mono',monospace; font-size:0.85rem;}
+
+  /* ---------- bill panel ---------- */
+  .bill-panel{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--r2);
+    padding:22px; position:sticky; top:20px; box-shadow:var(--shadow);
+  }
+  .bill-panel h2{font-size:1.1rem; margin-bottom:2px;}
+  .bill-meta{font-size:0.72rem; color:var(--text3); margin-bottom:14px;}
+  .bill-cust{background:var(--bg2); border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:0.8rem;}
+  .bill-cust b{font-weight:700;}
+  .loc-field{margin-bottom:14px;}
+  .loc-field input{width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg2); font-size:0.8rem;}
+  .bill-items{max-height:280px; overflow-y:auto; margin-bottom:12px;}
+  .bill-line{padding:8px 0; border-bottom:1px dashed var(--border2); font-size:0.8rem;}
+  .bill-line-top{display:flex; justify-content:space-between; gap:8px;}
+  .bill-line-addons{font-size:0.7rem; color:var(--text3); margin-top:2px;}
+  .bill-line-x{color:var(--danger); font-size:0.68rem; cursor:pointer; font-family:'Space Mono',monospace;}
+  .empty-note{font-size:0.8rem; color:var(--text3); font-style:italic; padding:20px 0; text-align:center;}
+  .bill-totals{border-top:1px solid var(--border); padding-top:10px; margin-top:6px;}
+  .trow{display:flex; justify-content:space-between; font-size:0.8rem; padding:3px 0; color:var(--text2);}
+  .trow.grand{font-size:1rem; font-weight:700; color:var(--text); padding-top:8px; border-top:1px solid var(--border2); margin-top:6px;}
+  .bill-actions{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
+  .bill-actions .row2{display:flex; gap:8px;}
+  .bill-actions .row2 .btn{flex:1;}
+
+  /* ---------- addon modal ---------- */
+  .overlay{position:fixed; inset:0; background:rgba(20,16,10,0.45); display:none; align-items:center; justify-content:center; z-index:100; padding:20px;}
+  .overlay.active{display:flex;}
+  .modal{background:var(--bg2); border-radius:var(--r2); padding:26px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow2);}
+  .modal h3{font-size:1.05rem; margin-bottom:4px;}
+  .modal .mprice{font-size:0.78rem; color:var(--text3); margin-bottom:16px; font-family:'Space Mono',monospace;}
+  .addon-group{margin-bottom:16px;}
+  .addon-group .gname{font-size:0.75rem; font-weight:700; margin-bottom:2px; display:flex; justify-content:space-between; align-items:center;}
+  .addon-group .greq{font-size:0.6rem; color:var(--danger); font-family:'Space Mono',monospace; letter-spacing:1px;}
+  .addon-opt{display:flex; align-items:center; gap:10px; padding:7px 0; font-size:0.83rem;}
+  .addon-opt input{width:16px; height:16px; accent-color:var(--green);}
+  .addon-opt .oprice{margin-left:auto; color:var(--text3); font-family:'Space Mono',monospace; font-size:0.75rem;}
+  .modal-actions{display:flex; gap:8px; margin-top:18px;}
+  .modal-actions .btn{flex:1;}
+
+  /* ---------- pin modal ---------- */
+  .pin-box{max-width:300px; text-align:center;}
+  .pin-box input{width:100%; text-align:center; letter-spacing:8px; font-size:1.3rem; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); margin:16px 0;}
+
+  /* ---------- manage menu ---------- */
+  .mm-section{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:18px; margin-bottom:18px;}
+  .mm-section-hd{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .mm-section-hd input{font-family:'Space Mono',monospace; font-size:0.72rem; letter-spacing:2px; text-transform:uppercase; border:none; background:transparent; color:var(--green-dark); font-weight:700; width:60%;}
+  .mm-item{border:1px solid var(--border2); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--bg);}
+  .mm-row{display:grid; grid-template-columns:1.2fr 2fr 90px 32px; gap:8px; margin-bottom:8px;}
+  .mm-row input{padding:8px 9px; border-radius:8px; border:1px solid var(--border); font-size:0.8rem; width:100%;}
+  .mm-item-x{background:transparent; border:none; color:var(--danger); font-size:1.1rem;}
+  .mm-addons{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border2);}
+  .mm-addons-toggle{font-size:0.68rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--green-dark); font-family:'Space Mono',monospace; background:none; border:none; padding:4px 0;}
+  .mm-addon-group{background:var(--card); border-radius:8px; padding:10px; margin-top:8px;}
+  .mm-addon-group-hd{display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+  .mm-addon-group-hd input[type=text]{flex:1; min-width:100px; padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.78rem;}
+  .mm-addon-opt-row{display:grid; grid-template-columns:2fr 90px 28px; gap:6px; margin-bottom:6px;}
+  .mm-addon-opt-row input{padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.76rem;}
+  .chip{font-size:0.62rem; padding:3px 8px; border-radius:20px; background:var(--bg2); border:1px solid var(--border); font-family:'Space Mono',monospace; letter-spacing:1px; text-transform:uppercase;}
+  .mm-toprow{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
+  .settings-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:18px; margin-bottom:20px;}
+  .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media(max-width:700px){.settings-grid{grid-template-columns:1fr;}}
+
+  /* ---------- reports ---------- */
+  .filter-bar{display:flex; gap:10px; align-items:center; margin-bottom:20px; flex-wrap:wrap;}
+  .filter-bar select,.filter-bar input[type=date]{padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg2); font-size:0.8rem;}
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px;}
+  @media(max-width:800px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+  .stat-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:16px;}
+  .stat-card .label{margin-bottom:6px;}
+  .stat-card .val{font-size:1.4rem; font-family:'Fraunces',serif; font-weight:600;}
+  .rep-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:18px; margin-bottom:18px;}
+  .rep-card h3{font-size:0.9rem; margin-bottom:12px;}
+  table{width:100%; border-collapse:collapse; font-size:0.82rem;}
+  th{text-align:left; padding:7px 8px; font-family:'Space Mono',monospace; font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--text3); border-bottom:1px solid var(--border);}
+  td{padding:8px; border-bottom:1px solid var(--border2);}
+  tr:last-child td{border-bottom:none;}
+  .peak-hl{background:var(--green); color:var(--green-fg); border-radius:6px; padding:1px 6px; font-family:'Space Mono',monospace; font-size:0.7rem;}
+  .link-btn{background:none;border:none;color:var(--green-dark);font-weight:700;font-size:0.75rem;text-decoration:underline;padding:0;}
+
+  /* ---------- order history ---------- */
+  .oh-search{margin-bottom:18px;}
+  .oh-search input{width:100%; max-width:340px; padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--bg2); font-size:0.85rem;}
+  .oh-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:14px 18px; margin-bottom:10px;}
+  .oh-hd{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .oh-hd .who{font-weight:700; font-size:0.9rem;}
+  .oh-hd .when{font-size:0.72rem; color:var(--text3); font-family:'Space Mono',monospace;}
+  .oh-detail{display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border2); font-size:0.8rem;}
+  .oh-detail.open{display:block;}
+  .oh-actions{display:flex; gap:8px; margin-top:10px;}
+
+  ::-webkit-scrollbar{width:6px; height:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+
+  @media print{
+    .topnav,.bill-actions,.billing-grid > div:first-child,.overlay{display:none !important;}
+    body{background:#fff;}
+    .bill-panel{position:static; box-shadow:none; border:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="brand">
+    <div class="brand-mark">H</div>
+    <div class="brand-text">
+      <div class="name" id="brandNameDisplay">Heebee Coffee</div>
+      <div class="sub">Event POS</div>
+    </div>
+  </div>
+  <div class="navtabs">
+    <button class="navtab" data-nav="start">New Bill</button>
+    <button class="navtab" data-nav="manageMenu">Manage Menu</button>
+    <button class="navtab" data-nav="reports">Reports</button>
+    <button class="navtab" data-nav="orderHistory">Order History</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- START VIEW -->
+  <div class="view" id="view-start">
+    <div class="start-shell">
+      <div class="start-card">
+        <h1>Welcome</h1>
+        <span class="tag">Start a new order</span>
+        <div class="field">
+          <label class="label">Customer Name</label>
+          <input type="text" id="custName" placeholder="e.g. Priya Sharma">
+        </div>
+        <div class="field">
+          <label class="label">Contact Number</label>
+          <input type="tel" id="custContact" placeholder="e.g. 9876543210">
+        </div>
+        <div class="start-actions">
+          <button class="btn btn-dark btn-block" id="btnStartBilling">Start Billing</button>
+          <div class="or-sep">OR</div>
+          <button class="btn btn-outline btn-block" id="btnGuestBilling">Guest Billing (skip details)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BILLING VIEW -->
+  <div class="view" id="view-billing">
+    <div class="billing-grid">
+      <div id="menuArea"></div>
+
+      <div class="bill-panel">
+        <h2>Current Bill</h2>
+        <div class="bill-meta" id="billMetaLine">GSTIN: — · Bill No: —</div>
+        <div class="bill-cust" id="billCustLine"></div>
+        <div class="loc-field">
+          <label class="label">Location (this popup)</label>
+          <input type="text" id="billLocation" placeholder="e.g. Phoenix Mall, Hall 3">
+        </div>
+        <div class="bill-items" id="billItemsArea"></div>
+        <div class="bill-totals">
+          <div class="trow"><span>Subtotal</span><span id="tSub">₹0.00</span></div>
+          <div class="trow"><span>CGST (2.5%)</span><span id="tCgst">₹0.00</span></div>
+          <div class="trow"><span>SGST (2.5%)</span><span id="tSgst">₹0.00</span></div>
+          <div class="trow grand"><span>Total</span><span id="tTotal">₹0.00</span></div>
+        </div>
+        <div class="bill-actions">
+          <button class="btn btn-green btn-block" id="btnFinishBill">Finish &amp; Save Bill</button>
+          <div class="row2">
+            <button class="btn btn-outline" id="btnPrintBill">Print / PDF</button>
+            <button class="btn btn-outline" id="btnWhatsappBill">Send WhatsApp</button>
+          </div>
+          <button class="btn btn-danger btn-block" id="btnClearBill">Clear Bill</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANAGE MENU VIEW -->
+  <div class="view" id="view-manageMenu">
+    <div id="mmGate"></div>
+    <div id="mmContent" style="display:none;">
+      <h2 style="margin-bottom:18px;">Manage Menu</h2>
+
+      <div class="settings-card">
+        <h3 style="font-size:0.85rem;margin-bottom:12px;">Bill Settings</h3>
+        <div class="settings-grid">
+          <div class="field" style="margin-bottom:0;">
+            <label class="label">Business Name</label>
+            <input type="text" id="setBusinessName">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="label">GSTIN</label>
+            <input type="text" id="setGstin">
+          </div>
+        </div>
+        <button class="btn btn-dark" id="btnSaveSettings" style="margin-top:14px;">Save Settings</button>
+      </div>
+
+      <div class="mm-toprow">
+        <button class="btn btn-dark" id="btnAddSection">+ Add Section</button>
+        <button class="btn btn-outline" id="btnSaveMenu">Save Menu Changes</button>
+      </div>
+      <div id="mmSections"></div>
+    </div>
+  </div>
+
+  <!-- REPORTS VIEW -->
+  <div class="view" id="view-reports">
+    <div id="repGate"></div>
+    <div id="repContent" style="display:none;">
+      <h2 style="margin-bottom:18px;">Sales Reports</h2>
+      <div class="filter-bar">
+        <label class="label">Range</label>
+        <select id="repRange">
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        <input type="date" id="repFrom" style="display:none;">
+        <input type="date" id="repTo" style="display:none;">
+        <button class="btn btn-outline" id="btnRunReport">Run</button>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Bills</div><div class="val" id="repBills">0</div></div>
+        <div class="stat-card"><div class="label">Subtotal</div><div class="val" id="repSubtotal">₹0</div></div>
+        <div class="stat-card"><div class="label">GST Collected</div><div class="val" id="repGst">₹0</div></div>
+        <div class="stat-card"><div class="label">Total Sale</div><div class="val" id="repTotal">₹0</div></div>
+      </div>
+      <div class="rep-card">
+        <h3>Product-wise Sales</h3>
+        <table><thead><tr><th>Product</th><th>Qty Sold</th><th>Amount</th></tr></thead><tbody id="repProductBody"></tbody></table>
+      </div>
+      <div class="rep-card">
+        <h3>Add-ons Sold</h3>
+        <table><thead><tr><th>Add-on</th><th>Qty Sold</th><th>Amount</th></tr></thead><tbody id="repAddonBody"></tbody></table>
+      </div>
+      <div class="rep-card">
+        <h3>Sales by Hour (Peak Time)</h3>
+        <table><thead><tr><th>Hour</th><th>Bills</th><th>Sale</th></tr></thead><tbody id="repHourBody"></tbody></table>
+      </div>
+      <div class="rep-card">
+        <h3>All Bills</h3>
+        <table><thead><tr><th>Bill No</th><th>Customer</th><th>Date</th><th>Time</th><th>Total</th></tr></thead><tbody id="repBillsBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDER HISTORY VIEW -->
+  <div class="view" id="view-orderHistory">
+    <h2 style="margin-bottom:18px;">Order History</h2>
+    <div class="oh-search">
+      <input type="text" id="ohSearch" placeholder="Search by name or contact number...">
+    </div>
+    <div id="ohList"></div>
+  </div>
+
+</div>
+
+<!-- ADDON MODAL -->
+<div class="overlay" id="addonOverlay">
+  <div class="modal">
+    <h3 id="addonModalName"></h3>
+    <div class="mprice" id="addonModalPrice"></div>
+    <div id="addonModalGroups"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="addonCancel">Cancel</button>
+      <button class="btn btn-dark" id="addonConfirm">Add to Bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div class="overlay" id="pinOverlay">
+  <div class="modal pin-box">
+    <h3>Staff PIN Required</h3>
+    <p style="font-size:0.78rem;color:var(--text3);">Enter the 4-digit PIN to continue.</p>
+    <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••">
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="pinCancel">Cancel</button>
+      <button class="btn btn-dark" id="pinConfirm">Enter</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, setDoc, collection, addDoc, runTransaction,
+  query, where, orderBy, getDocs, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* =====================================================================
+   FIREBASE CONFIG — replace with YOUR project's config
+   (Firebase Console → Project Settings → Your apps → SDK setup & config)
+   These values are safe to keep public; Firestore Security Rules do the
+   actual access control, not this config object.
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAwZqavCY1VZK90-M_kBpzYULEmrgeQcIM",
+  authDomain: "heebee-event-pos.firebaseapp.com",
+  projectId: "heebee-event-pos",
+  storageBucket: "heebee-event-pos.firebasestorage.app",
+  messagingSenderId: "206889024396",
+  appId: "1:206889024396:web:e0b35e4561767e4a4f34a9"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const STAFF_PIN = "3970";
+const COL_BILLS = "event_bills";
+const DOC_MENU = "event_menu/current";
+const DOC_SETTINGS = "event_config/settings";
+const DOC_COUNTER = "event_counters/billCounter";
+
+/* ---------------------------------------------------------------------
+   DEFAULT SEED DATA (used only if Firestore has nothing yet)
+   --------------------------------------------------------------------- */
+const FLAVOUR_ADDON = () => ([{
+  id: cryptoId(), name: "Flavour", type: "single", required: true,
+  options: [{name:"Caramel",price:0},{name:"Hazelnut",price:0},{name:"Vanilla",price:0}]
+}]);
+
+function defaultMenu(){
+  return { sections: [
+    { id: cryptoId(), name: "Matcha", items: [
+      { id: cryptoId(), name: "Vanilla Matcha", description:"Velvety smooth with a hint of vanilla.", price:475, addonGroups: [] },
+      { id: cryptoId(), name: "Mango Matcha", description:"Tropical sweetness meets ceremonial matcha.", price:475, addonGroups: [] },
+      { id: cryptoId(), name: "Strawberry Matcha", description:"Fresh strawberry layered over earthy matcha.", price:475, addonGroups: [] },
+    ]},
+    { id: cryptoId(), name: "Coffee", items: [
+      { id: cryptoId(), name: "Americano (Hot)", description:"Espresso with hot water.", price:349, addonGroups: [] },
+      { id: cryptoId(), name: "Americano (Cold)", description:"Espresso with cold water.", price:399, addonGroups: [] },
+      { id: cryptoId(), name: "Cappuccino (Hot)", description:"Choose your flavour.", price:349, addonGroups: FLAVOUR_ADDON() },
+      { id: cryptoId(), name: "Cappuccino (Cold)", description:"Choose your flavour.", price:399, addonGroups: FLAVOUR_ADDON() },
+      { id: cryptoId(), name: "Latte (Hot)", description:"Choose your flavour.", price:349, addonGroups: FLAVOUR_ADDON() },
+      { id: cryptoId(), name: "Latte (Cold)", description:"Choose your flavour.", price:399, addonGroups: FLAVOUR_ADDON() },
+      { id: cryptoId(), name: "Fapio (Hot)", description:"Choose your flavour.", price:349, addonGroups: FLAVOUR_ADDON() },
+      { id: cryptoId(), name: "Fapio (Cold)", description:"Choose your flavour.", price:399, addonGroups: FLAVOUR_ADDON() },
+    ]},
+    { id: cryptoId(), name: "Bakery", items: [
+      { id: cryptoId(), name: "Tea Cakes", description:"Blueberry / Almond & Honey.", price:149, addonGroups: [] },
+      { id: cryptoId(), name: "Cookies", description:"Cream Cheese Kik / Almond Oat / Choco Chip.", price:199, addonGroups: [] },
+      { id: cryptoId(), name: "Brownie", description:"Chocolate.", price:249, addonGroups: [] },
+    ]},
+    { id: cryptoId(), name: "Savoury", items: [
+      { id: cryptoId(), name: "Mint & Paneer Sandwich", description:"Fresh paneer with signature mint chutney.", price:349, addonGroups: [] },
+      { id: cryptoId(), name: "Chips & Dips", description:"Tomato Salsa & Creamy Cheese Dip.", price:349, addonGroups: [] },
+    ]},
+  ]};
+}
+function defaultSettings(){
+  return { businessName: "Heebee Coffee", gstin: "03AAFCH0428K1ZV" };
+}
+function cryptoId(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+/* ---------------------------------------------------------------------
+   STATE
+   --------------------------------------------------------------------- */
+let MENU = null;
+let SETTINGS = null;
+let cart = [];              // [{lineId, itemId, name, price, qty, addons:[{name,price}]}]
+let customer = { name:"", contact:"", isGuest:true };
+let unlocked = { manageMenu:false, reports:false };
+let pendingPinTarget = null;
+let pendingAddonItem = null;
+
+/* ---------------------------------------------------------------------
+   FIRESTORE LOAD/SAVE
+   --------------------------------------------------------------------- */
+async function loadMenu(){
+  const ref = doc(db, DOC_MENU);
+  const snap = await getDoc(ref);
+  if (snap.exists()){ MENU = snap.data(); }
+  else { MENU = defaultMenu(); await setDoc(ref, MENU); }
+}
+async function saveMenu(){
+  await setDoc(doc(db, DOC_MENU), MENU);
+}
+async function loadSettings(){
+  const ref = doc(db, DOC_SETTINGS);
+  const snap = await getDoc(ref);
+  if (snap.exists()){ SETTINGS = snap.data(); }
+  else { SETTINGS = defaultSettings(); await setDoc(ref, SETTINGS); }
+}
+async function saveSettings(){
+  await setDoc(doc(db, DOC_SETTINGS), SETTINGS);
+}
+async function nextBillNumber(){
+  const ref = doc(db, DOC_COUNTER);
+  return await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(ref);
+    let next = 1001;
+    if (snap.exists()) next = snap.data().next;
+    tx.set(ref, { next: next + 1 });
+    return next;
+  });
+}
+
+/* ---------------------------------------------------------------------
+   NAVIGATION
+   --------------------------------------------------------------------- */
+function showView(name){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("view-"+name).classList.add("active");
+  document.querySelectorAll(".navtab").forEach(t=>t.classList.toggle("active", t.dataset.nav===name));
+  if (name === "manageMenu") enterGated("manageMenu");
+  if (name === "reports") enterGated("reports");
+  if (name === "orderHistory") renderOrderHistory();
+}
+document.querySelectorAll(".navtab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    const target = tab.dataset.nav;
+    if (target === "start" && cart.length){
+      if (!confirm("Start a new bill? Current cart will be cleared.")) return;
+      cart = []; customer = {name:"",contact:"",isGuest:true};
+    }
+    showView(target);
+  });
+});
+
+function enterGated(view){
+  const gateId = view === "manageMenu" ? "mmGate" : "repGate";
+  const contentId = view === "manageMenu" ? "mmContent" : "repContent";
+  if (unlocked[view]){
+    document.getElementById(gateId).innerHTML = "";
+    document.getElementById(contentId).style.display = "block";
+    if (view === "manageMenu") renderManageMenu();
+    if (view === "reports") { document.getElementById("repFrom").valueAsDate = new Date(); document.getElementById("repTo").valueAsDate = new Date(); runReport(); }
+    return;
+  }
+  document.getElementById(contentId).style.display = "none";
+  document.getElementById(gateId).innerHTML = `<div class="start-shell" style="min-height:40vh;"><div class="start-card"><h1>Locked</h1><span class="tag">Staff PIN required</span><button class="btn btn-dark btn-block" id="gateUnlockBtn">Enter PIN</button></div></div>`;
+  document.getElementById("gateUnlockBtn").addEventListener("click", ()=> openPin(view));
+}
+
+/* ---------------------------------------------------------------------
+   PIN MODAL
+   --------------------------------------------------------------------- */
+function openPin(target){
+  pendingPinTarget = target;
+  document.getElementById("pinInput").value = "";
+  document.getElementById("pinOverlay").classList.add("active");
+  document.getElementById("pinInput").focus();
+}
+document.getElementById("pinCancel").addEventListener("click", ()=> document.getElementById("pinOverlay").classList.remove("active"));
+document.getElementById("pinConfirm").addEventListener("click", confirmPin);
+document.getElementById("pinInput").addEventListener("keydown", e=>{ if(e.key==="Enter") confirmPin(); });
+function confirmPin(){
+  const val = document.getElementById("pinInput").value;
+  document.getElementById("pinOverlay").classList.remove("active");
+  if (val === STAFF_PIN){
+    unlocked[pendingPinTarget] = true;
+    enterGated(pendingPinTarget);
+  } else {
+    alert("Incorrect PIN.");
+  }
+}
+
+/* ---------------------------------------------------------------------
+   START SCREEN
+   --------------------------------------------------------------------- */
+document.getElementById("btnStartBilling").addEventListener("click", ()=>{
+  const name = document.getElementById("custName").value.trim();
+  const contact = document.getElementById("custContact").value.trim();
+  if (!name || !contact){ alert("Please enter both name and contact number."); return; }
+  customer = { name, contact, isGuest:false };
+  enterBilling();
+});
+document.getElementById("btnGuestBilling").addEventListener("click", ()=>{
+  customer = { name:"Guest", contact:"", isGuest:true };
+  enterBilling();
+});
+function enterBilling(){
+  cart = [];
+  document.getElementById("custName").value = "";
+  document.getElementById("custContact").value = "";
+  const savedLoc = localStorage.getItem("event_pos_location") || "";
+  document.getElementById("billLocation").value = savedLoc;
+  renderMenu();
+  renderBillPanel();
+  showView("billing");
+}
+
+/* ---------------------------------------------------------------------
+   MENU RENDER (billing screen)
+   --------------------------------------------------------------------- */
+function renderMenu(){
+  const area = document.getElementById("menuArea");
+  area.innerHTML = "";
+  MENU.sections.forEach(sec=>{
+    const block = document.createElement("div");
+    block.className = "section-block";
+    block.innerHTML = `<div class="section-pill">${escapeHtml(sec.name)}</div>`;
+    sec.items.forEach(item=>{
+      const row = document.createElement("div");
+      row.className = "item-row";
+      const qty = cartQtyFor(item.id, true);
+      row.innerHTML = `
+        <div class="item-info">
+          <div class="name">${escapeHtml(item.name)}</div>
+          <div class="desc">${escapeHtml(item.description||"")}</div>
+        </div>
+        <div class="item-right">
+          <div class="item-price">₹${item.price}</div>
+          <div class="qtystep">
+            <button class="qtybtn minus">−</button>
+            <span class="qtyval">${qty}</span>
+            <button class="qtybtn plus">+</button>
+          </div>
+        </div>`;
+      row.querySelector(".plus").addEventListener("click", ()=> handleAddClick(item));
+      row.querySelector(".minus").addEventListener("click", ()=> handleRemoveClick(item));
+      block.appendChild(row);
+    });
+    area.appendChild(block);
+  });
+}
+function cartQtyFor(itemId, simpleOnly){
+  return cart.filter(l=>l.itemId===itemId && (!simpleOnly || l.addons.length===0)).reduce((s,l)=>s+l.qty,0);
+}
+function handleAddClick(item){
+  if (item.addonGroups && item.addonGroups.length){
+    openAddonModal(item);
+  } else {
+    const existing = cart.find(l=>l.itemId===item.id && l.addons.length===0);
+    if (existing) existing.qty++;
+    else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:[] });
+    renderMenu(); renderBillPanel();
+  }
+}
+function handleRemoveClick(item){
+  const existing = cart.find(l=>l.itemId===item.id && l.addons.length===0);
+  if (!existing) return;
+  existing.qty--;
+  if (existing.qty<=0) cart = cart.filter(l=>l!==existing);
+  renderMenu(); renderBillPanel();
+}
+
+/* ---------------------------------------------------------------------
+   ADDON MODAL
+   --------------------------------------------------------------------- */
+function openAddonModal(item){
+  pendingAddonItem = item;
+  document.getElementById("addonModalName").textContent = item.name;
+  document.getElementById("addonModalPrice").textContent = "Base price ₹" + item.price;
+  const groupsEl = document.getElementById("addonModalGroups");
+  groupsEl.innerHTML = "";
+  item.addonGroups.forEach(g=>{
+    const gdiv = document.createElement("div");
+    gdiv.className = "addon-group";
+    gdiv.dataset.groupId = g.id;
+    gdiv.dataset.type = g.type;
+    gdiv.dataset.required = g.required ? "1":"0";
+    gdiv.innerHTML = `<div class="gname"><span>${escapeHtml(g.name)}</span>${g.required?'<span class="greq">Required</span>':''}</div>`;
+    g.options.forEach((opt,i)=>{
+      const optRow = document.createElement("label");
+      optRow.className = "addon-opt";
+      const inputType = g.type === "single" ? "radio" : "checkbox";
+      optRow.innerHTML = `<input type="${inputType}" name="grp-${g.id}" value="${i}"><span>${escapeHtml(opt.name)}</span><span class="oprice">${opt.price?('+₹'+opt.price):''}</span>`;
+      gdiv.appendChild(optRow);
+    });
+    groupsEl.appendChild(gdiv);
+  });
+  document.getElementById("addonOverlay").classList.add("active");
+}
+document.getElementById("addonCancel").addEventListener("click", ()=>{
+  document.getElementById("addonOverlay").classList.remove("active");
+  pendingAddonItem = null;
+});
+document.getElementById("addonConfirm").addEventListener("click", ()=>{
+  const item = pendingAddonItem;
+  if (!item) return;
+  const chosen = [];
+  let missingRequired = false;
+  document.querySelectorAll("#addonModalGroups .addon-group").forEach(gdiv=>{
+    const gid = gdiv.dataset.groupId;
+    const required = gdiv.dataset.required === "1";
+    const group = item.addonGroups.find(g=>g.id===gid);
+    const checked = gdiv.querySelectorAll("input:checked");
+    if (required && checked.length===0) missingRequired = true;
+    checked.forEach(inp=>{
+      const opt = group.options[parseInt(inp.value,10)];
+      chosen.push({ name: group.name+": "+opt.name, price: opt.price||0 });
+    });
+  });
+  if (missingRequired){ alert("Please select all required add-ons."); return; }
+  const addonSig = chosen.map(a=>a.name).sort().join("|");
+  const existing = cart.find(l=> l.itemId===item.id && l.addons.map(a=>a.name).sort().join("|")===addonSig );
+  if (existing) existing.qty++;
+  else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:chosen });
+  document.getElementById("addonOverlay").classList.remove("active");
+  pendingAddonItem = null;
+  renderMenu(); renderBillPanel();
+});
+
+/* ---------------------------------------------------------------------
+   BILL PANEL
+   --------------------------------------------------------------------- */
+function lineTotal(l){ return (l.price + l.addons.reduce((s,a)=>s+(a.price||0),0)) * l.qty; }
+function billTotals(){
+  const subtotal = cart.reduce((s,l)=>s+lineTotal(l),0);
+  const cgst = round2(subtotal*0.025);
+  const sgst = round2(subtotal*0.025);
+  const total = round2(subtotal+cgst+sgst);
+  return { subtotal: round2(subtotal), cgst, sgst, total };
+}
+function round2(n){ return Math.round(n*100)/100; }
+
+function renderBillPanel(){
+  document.getElementById("billMetaLine").textContent = `GSTIN: ${SETTINGS.gstin} · Bill will be numbered on save`;
+  document.getElementById("billCustLine").innerHTML = customer.isGuest
+    ? `<b>Guest Billing</b>`
+    : `<b>${escapeHtml(customer.name)}</b> · ${escapeHtml(customer.contact)}`;
+
+  const itemsArea = document.getElementById("billItemsArea");
+  if (!cart.length){
+    itemsArea.innerHTML = `<div class="empty-note">No items added yet.</div>`;
+  } else {
+    itemsArea.innerHTML = "";
+    cart.forEach(l=>{
+      const row = document.createElement("div");
+      row.className = "bill-line";
+      row.innerHTML = `
+        <div class="bill-line-top">
+          <span>${l.qty}x ${escapeHtml(l.name)}</span>
+          <span>₹${lineTotal(l).toFixed(2)} <span class="bill-line-x" data-line="${l.lineId}">✕</span></span>
+        </div>
+        ${l.addons.length ? `<div class="bill-line-addons">${l.addons.map(a=>escapeHtml(a.name)).join(", ")}</div>` : ""}
+      `;
+      row.querySelector(".bill-line-x").addEventListener("click", ()=>{
+        cart = cart.filter(x=>x.lineId!==l.lineId);
+        renderMenu(); renderBillPanel();
+      });
+      itemsArea.appendChild(row);
+    });
+  }
+  const t = billTotals();
+  document.getElementById("tSub").textContent = "₹"+t.subtotal.toFixed(2);
+  document.getElementById("tCgst").textContent = "₹"+t.cgst.toFixed(2);
+  document.getElementById("tSgst").textContent = "₹"+t.sgst.toFixed(2);
+  document.getElementById("tTotal").textContent = "₹"+t.total.toFixed(2);
+}
+
+document.getElementById("btnClearBill").addEventListener("click", ()=>{
+  if (cart.length && !confirm("Clear all items from this bill?")) return;
+  cart = []; renderMenu(); renderBillPanel();
+});
+document.getElementById("billLocation").addEventListener("input", e=>{
+  localStorage.setItem("event_pos_location", e.target.value);
+});
+
+document.getElementById("btnFinishBill").addEventListener("click", async ()=>{
+  if (!cart.length){ alert("Add at least one item before finishing the bill."); return; }
+  const btn = document.getElementById("btnFinishBill");
+  btn.disabled = true; btn.textContent = "Saving...";
+  try{
+    const billNo = await nextBillNumber();
+    const t = billTotals();
+    const billDoc = {
+      billNo,
+      customerName: customer.name,
+      contact: customer.contact,
+      isGuest: customer.isGuest,
+      location: document.getElementById("billLocation").value.trim(),
+      gstin: SETTINGS.gstin,
+      businessName: SETTINGS.businessName,
+      items: cart.map(l=>({ name:l.name, price:l.price, qty:l.qty, addons:l.addons })),
+      subtotal: t.subtotal, cgst: t.cgst, sgst: t.sgst, total: t.total,
+      createdAt: Timestamp.now()
+    };
+    await addDoc(collection(db, COL_BILLS), billDoc);
+    window.__lastBill = billDoc;
+    document.getElementById("billMetaLine").textContent = `GSTIN: ${SETTINGS.gstin} · Bill No: #${billNo} · Saved ✓`;
+    alert(`Bill #${billNo} saved.`);
+  } catch(err){
+    console.error(err);
+    alert("Could not save bill — check Firebase config/connection.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Finish & Save Bill";
+  }
+});
+
+document.getElementById("btnPrintBill").addEventListener("click", ()=>{ window.print(); });
+
+document.getElementById("btnWhatsappBill").addEventListener("click", ()=>{
+  if (!customer.contact){ alert("No contact number on this bill (guest billing) — nothing to send."); return; }
+  const t = billTotals();
+  const lines = [];
+  lines.push(`*${SETTINGS.businessName}*`);
+  lines.push(`Bill No: #${window.__lastBill ? window.__lastBill.billNo : "(unsaved)"}`);
+  lines.push(`Date: ${new Date().toLocaleString()}`);
+  const loc = document.getElementById("billLocation").value.trim();
+  if (loc) lines.push(`Location: ${loc}`);
+  lines.push("");
+  cart.forEach(l=>{
+    let s = `${l.qty}x ${l.name} - ₹${lineTotal(l).toFixed(2)}`;
+    if (l.addons.length) s += ` (${l.addons.map(a=>a.name).join(", ")})`;
+    lines.push(s);
+  });
+  lines.push("");
+  lines.push(`Subtotal: ₹${t.subtotal.toFixed(2)}`);
+  lines.push(`CGST (2.5%): ₹${t.cgst.toFixed(2)}`);
+  lines.push(`SGST (2.5%): ₹${t.sgst.toFixed(2)}`);
+  lines.push(`Total: ₹${t.total.toFixed(2)}`);
+  lines.push("");
+  lines.push(`GSTIN: ${SETTINGS.gstin}`);
+  lines.push("Thank you for visiting!");
+  const text = encodeURIComponent(lines.join("\n"));
+  let digits = customer.contact.replace(/\D/g,"");
+  if (digits.length===10) digits = "91"+digits;
+  window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
+});
+
+/* ---------------------------------------------------------------------
+   MANAGE MENU
+   --------------------------------------------------------------------- */
+function renderManageMenu(){
+  document.getElementById("setBusinessName").value = SETTINGS.businessName;
+  document.getElementById("setGstin").value = SETTINGS.gstin;
+  const wrap = document.getElementById("mmSections");
+  wrap.innerHTML = "";
+  MENU.sections.forEach(sec=>{
+    const sdiv = document.createElement("div");
+    sdiv.className = "mm-section";
+    sdiv.innerHTML = `
+      <div class="mm-section-hd">
+        <input type="text" value="${escapeAttr(sec.name)}" data-role="secname">
+        <button class="btn btn-danger" data-role="removeSec">Remove Section</button>
+      </div>
+      <div data-role="items"></div>
+      <button class="btn btn-outline" data-role="addItem" style="margin-top:6px;">+ Add Item</button>
+    `;
+    sdiv.querySelector('[data-role="secname"]').addEventListener("input", e=> sec.name=e.target.value);
+    sdiv.querySelector('[data-role="removeSec"]').addEventListener("click", ()=>{
+      if (!confirm(`Remove section "${sec.name}" and all its items?`)) return;
+      MENU.sections = MENU.sections.filter(s=>s!==sec);
+      renderManageMenu();
+    });
+    sdiv.querySelector('[data-role="addItem"]').addEventListener("click", ()=>{
+      sec.items.push({ id:cryptoId(), name:"New Item", description:"", price:0, addonGroups:[] });
+      renderManageMenu();
+    });
+    const itemsWrap = sdiv.querySelector('[data-role="items"]');
+    sec.items.forEach(item=> itemsWrap.appendChild(renderMMItem(sec, item)));
+    wrap.appendChild(sdiv);
+  });
+}
+
+function renderMMItem(sec, item){
+  const idiv = document.createElement("div");
+  idiv.className = "mm-item";
+  idiv.innerHTML = `
+    <div class="mm-row">
+      <input type="text" value="${escapeAttr(item.name)}" data-role="name" placeholder="Item name">
+      <input type="text" value="${escapeAttr(item.description||"")}" data-role="desc" placeholder="Description">
+      <input type="number" value="${item.price}" data-role="price" placeholder="Price">
+      <button class="mm-item-x" data-role="removeItem">✕</button>
+    </div>
+    <button class="mm-addons-toggle" data-role="toggleAddons">+ Add-ons (${item.addonGroups.length})</button>
+    <div class="mm-addons" data-role="addonsWrap" style="display:none;"></div>
+  `;
+  idiv.querySelector('[data-role="name"]').addEventListener("input", e=> item.name=e.target.value);
+  idiv.querySelector('[data-role="desc"]').addEventListener("input", e=> item.description=e.target.value);
+  idiv.querySelector('[data-role="price"]').addEventListener("input", e=> item.price=parseFloat(e.target.value)||0);
+  idiv.querySelector('[data-role="removeItem"]').addEventListener("click", ()=>{
+    sec.items = sec.items.filter(i=>i!==item);
+    renderManageMenu();
+  });
+  const toggle = idiv.querySelector('[data-role="toggleAddons"]');
+  const addonsWrap = idiv.querySelector('[data-role="addonsWrap"]');
+  toggle.addEventListener("click", ()=>{
+    const open = addonsWrap.style.display !== "none";
+    addonsWrap.style.display = open ? "none" : "block";
+    if (!open) renderMMAddonGroups(item, addonsWrap);
+  });
+  return idiv;
+}
+
+function renderMMAddonGroups(item, wrap){
+  wrap.innerHTML = "";
+  item.addonGroups.forEach(g=>{
+    const gdiv = document.createElement("div");
+    gdiv.className = "mm-addon-group";
+    gdiv.innerHTML = `
+      <div class="mm-addon-group-hd">
+        <input type="text" value="${escapeAttr(g.name)}" data-role="gname" placeholder="Group name e.g. Flavour">
+        <select data-role="gtype">
+          <option value="single" ${g.type==="single"?"selected":""}>Single (radio)</option>
+          <option value="multi" ${g.type==="multi"?"selected":""}>Multi (checkbox)</option>
+        </select>
+        <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-role="grequired" ${g.required?"checked":""}> Required
+        </label>
+        <button class="mm-item-x" data-role="removeGroup">✕</button>
+      </div>
+      <div data-role="opts"></div>
+      <button class="btn btn-outline" data-role="addOpt" style="font-size:0.68rem;padding:6px 10px;">+ Option</button>
+    `;
+    gdiv.querySelector('[data-role="gname"]').addEventListener("input", e=> g.name=e.target.value);
+    gdiv.querySelector('[data-role="gtype"]').addEventListener("change", e=> g.type=e.target.value);
+    gdiv.querySelector('[data-role="grequired"]').addEventListener("change", e=> g.required=e.target.checked);
+    gdiv.querySelector('[data-role="removeGroup"]').addEventListener("click", ()=>{
+      item.addonGroups = item.addonGroups.filter(x=>x!==g);
+      renderMMAddonGroups(item, wrap);
+      renderManageMenu();
+    });
+    const optsWrap = gdiv.querySelector('[data-role="opts"]');
+    g.options.forEach(opt=>{
+      const orow = document.createElement("div");
+      orow.className = "mm-addon-opt-row";
+      orow.innerHTML = `
+        <input type="text" value="${escapeAttr(opt.name)}" data-role="oname" placeholder="Option name">
+        <input type="number" value="${opt.price}" data-role="oprice" placeholder="Extra ₹">
+        <button class="mm-item-x" data-role="removeOpt">✕</button>
+      `;
+      orow.querySelector('[data-role="oname"]').addEventListener("input", e=> opt.name=e.target.value);
+      orow.querySelector('[data-role="oprice"]').addEventListener("input", e=> opt.price=parseFloat(e.target.value)||0);
+      orow.querySelector('[data-role="removeOpt"]').addEventListener("click", ()=>{
+        g.options = g.options.filter(o=>o!==opt);
+        renderMMAddonGroups(item, wrap);
+      });
+      optsWrap.appendChild(orow);
+    });
+    gdiv.querySelector('[data-role="addOpt"]').addEventListener("click", ()=>{
+      g.options.push({ name:"New Option", price:0 });
+      renderMMAddonGroups(item, wrap);
+    });
+    wrap.appendChild(gdiv);
+  });
+  const addGroupBtn = document.createElement("button");
+  addGroupBtn.className = "btn btn-outline";
+  addGroupBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;margin-top:4px;";
+  addGroupBtn.textContent = "+ Add-on Group";
+  addGroupBtn.addEventListener("click", ()=>{
+    item.addonGroups.push({ id:cryptoId(), name:"New Group", type:"single", required:false, options:[{name:"Option 1",price:0}] });
+    renderMMAddonGroups(item, wrap);
+    renderManageMenu();
+  });
+  wrap.appendChild(addGroupBtn);
+}
+
+document.getElementById("btnAddSection").addEventListener("click", ()=>{
+  MENU.sections.push({ id:cryptoId(), name:"New Section", items:[] });
+  renderManageMenu();
+});
+document.getElementById("btnSaveMenu").addEventListener("click", async ()=>{
+  await saveMenu();
+  alert("Menu saved.");
+});
+document.getElementById("btnSaveSettings").addEventListener("click", async ()=>{
+  SETTINGS.businessName = document.getElementById("setBusinessName").value.trim() || "Heebee Coffee";
+  SETTINGS.gstin = document.getElementById("setGstin").value.trim();
+  await saveSettings();
+  document.getElementById("brandNameDisplay").textContent = SETTINGS.businessName;
+  alert("Settings saved.");
+});
+
+/* ---------------------------------------------------------------------
+   REPORTS
+   --------------------------------------------------------------------- */
+document.getElementById("repRange").addEventListener("change", e=>{
+  const custom = e.target.value === "custom";
+  document.getElementById("repFrom").style.display = custom ? "inline-block":"none";
+  document.getElementById("repTo").style.display = custom ? "inline-block":"none";
+});
+document.getElementById("btnRunReport").addEventListener("click", runReport);
+
+function rangeDates(){
+  const mode = document.getElementById("repRange").value;
+  const now = new Date();
+  let from, to;
+  if (mode === "today"){
+    from = new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,0,0);
+    to = new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59);
+  } else if (mode === "yesterday"){
+    const y = new Date(now); y.setDate(y.getDate()-1);
+    from = new Date(y.getFullYear(),y.getMonth(),y.getDate(),0,0,0);
+    to = new Date(y.getFullYear(),y.getMonth(),y.getDate(),23,59,59);
+  } else if (mode === "7d"){
+    from = new Date(now); from.setDate(from.getDate()-6); from.setHours(0,0,0,0);
+    to = new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59);
+  } else {
+    const fv = document.getElementById("repFrom").value;
+    const tv = document.getElementById("repTo").value;
+    from = fv ? new Date(fv+"T00:00:00") : new Date(0);
+    to = tv ? new Date(tv+"T23:59:59") : new Date();
+  }
+  return { from, to };
+}
+
+async function runReport(){
+  const { from, to } = rangeDates();
+  const q = query(collection(db, COL_BILLS),
+    where("createdAt", ">=", Timestamp.fromDate(from)),
+    where("createdAt", "<=", Timestamp.fromDate(to)),
+    orderBy("createdAt","desc"));
+  const snap = await getDocs(q);
+  const bills = [];
+  snap.forEach(d=> bills.push({ id:d.id, ...d.data() }));
+
+  let subtotal=0, gst=0, total=0;
+  const productMap = {};
+  const addonMap = {};
+  const hourMap = {};
+  bills.forEach(b=>{
+    subtotal += b.subtotal||0; gst += (b.cgst||0)+(b.sgst||0); total += b.total||0;
+    const hr = b.createdAt.toDate().getHours();
+    hourMap[hr] = hourMap[hr] || { bills:0, sale:0 };
+    hourMap[hr].bills++; hourMap[hr].sale += b.total||0;
+    (b.items||[]).forEach(it=>{
+      productMap[it.name] = productMap[it.name] || { qty:0, amount:0 };
+      productMap[it.name].qty += it.qty;
+      productMap[it.name].amount += it.price*it.qty;
+      (it.addons||[]).forEach(a=>{
+        addonMap[a.name] = addonMap[a.name] || { qty:0, amount:0 };
+        addonMap[a.name].qty += it.qty;
+        addonMap[a.name].amount += (a.price||0)*it.qty;
+      });
+    });
+  });
+
+  document.getElementById("repBills").textContent = bills.length;
+  document.getElementById("repSubtotal").textContent = "₹"+subtotal.toFixed(2);
+  document.getElementById("repGst").textContent = "₹"+gst.toFixed(2);
+  document.getElementById("repTotal").textContent = "₹"+total.toFixed(2);
+
+  const prodBody = document.getElementById("repProductBody");
+  prodBody.innerHTML = Object.entries(productMap).sort((a,b)=>b[1].amount-a[1].amount)
+    .map(([name,v])=>`<tr><td>${escapeHtml(name)}</td><td>${v.qty}</td><td>₹${v.amount.toFixed(2)}</td></tr>`).join("")
+    || `<tr><td colspan="3" style="color:var(--text3);">No sales in this range.</td></tr>`;
+
+  const addonBody = document.getElementById("repAddonBody");
+  addonBody.innerHTML = Object.entries(addonMap).sort((a,b)=>b[1].qty-a[1].qty)
+    .map(([name,v])=>`<tr><td>${escapeHtml(name)}</td><td>${v.qty}</td><td>₹${v.amount.toFixed(2)}</td></tr>`).join("")
+    || `<tr><td colspan="3" style="color:var(--text3);">No add-ons sold in this range.</td></tr>`;
+
+  const peakHour = Object.entries(hourMap).sort((a,b)=>b[1].sale-a[1].sale)[0];
+  const hourBody = document.getElementById("repHourBody");
+  hourBody.innerHTML = Object.entries(hourMap).sort((a,b)=>a[0]-b[0])
+    .map(([hr,v])=>{
+      const label = `${String(hr).padStart(2,"0")}:00 – ${String((+hr+1)%24).padStart(2,"0")}:00`;
+      const isPeak = peakHour && peakHour[0]===hr;
+      return `<tr><td>${label} ${isPeak?'<span class="peak-hl">PEAK</span>':''}</td><td>${v.bills}</td><td>₹${v.sale.toFixed(2)}</td></tr>`;
+    }).join("") || `<tr><td colspan="3" style="color:var(--text3);">No data.</td></tr>`;
+
+  const billsBody = document.getElementById("repBillsBody");
+  billsBody.innerHTML = bills.map(b=>{
+    const d = b.createdAt.toDate();
+    return `<tr><td>#${b.billNo}</td><td>${escapeHtml(b.isGuest?"Guest":b.customerName)}</td><td>${d.toLocaleDateString()}</td><td>${d.toLocaleTimeString()}</td><td>₹${(b.total||0).toFixed(2)}</td></tr>`;
+  }).join("") || `<tr><td colspan="5" style="color:var(--text3);">No bills in this range.</td></tr>`;
+}
+
+/* ---------------------------------------------------------------------
+   ORDER HISTORY
+   --------------------------------------------------------------------- */
+let allBillsCache = null;
+async function fetchAllBillsRecent(){
+  const q = query(collection(db, COL_BILLS), orderBy("createdAt","desc"));
+  const snap = await getDocs(q);
+  const bills = [];
+  snap.forEach(d=> bills.push({ id:d.id, ...d.data() }));
+  return bills;
+}
+async function renderOrderHistory(){
+  const listEl = document.getElementById("ohList");
+  listEl.innerHTML = `<div class="empty-note">Loading...</div>`;
+  allBillsCache = await fetchAllBillsRecent();
+  paintOrderHistory(allBillsCache);
+}
+document.getElementById("ohSearch").addEventListener("input", e=>{
+  if (!allBillsCache) return;
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = !q ? allBillsCache : allBillsCache.filter(b=>
+    (b.customerName||"").toLowerCase().includes(q) || (b.contact||"").includes(q));
+  paintOrderHistory(filtered);
+});
+function paintOrderHistory(bills){
+  const listEl = document.getElementById("ohList");
+  if (!bills.length){ listEl.innerHTML = `<div class="empty-note">No orders found.</div>`; return; }
+  listEl.innerHTML = "";
+  bills.forEach(b=>{
+    const d = b.createdAt.toDate();
+    const card = document.createElement("div");
+    card.className = "oh-card";
+    card.innerHTML = `
+      <div class="oh-hd">
+        <div>
+          <div class="who">#${b.billNo} · ${escapeHtml(b.isGuest?"Guest":b.customerName)} ${b.contact?("· "+escapeHtml(b.contact)):""}</div>
+          <div class="when">${d.toLocaleDateString()} at ${d.toLocaleTimeString()} ${b.location?("· "+escapeHtml(b.location)):""}</div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-weight:700;">₹${(b.total||0).toFixed(2)}</div>
+      </div>
+      <div class="oh-detail" data-role="detail">
+        ${(b.items||[]).map(it=>`<div>${it.qty}x ${escapeHtml(it.name)} ${it.addons&&it.addons.length?('('+it.addons.map(a=>escapeHtml(a.name)).join(", ")+')'):''} — ₹${(it.price*it.qty).toFixed(2)}</div>`).join("")}
+        <div class="oh-actions">
+          <button class="btn btn-outline" data-role="toggle">Hide</button>
+          <button class="btn btn-green" data-role="reorder">Reorder</button>
+        </div>
+      </div>
+    `;
+    card.addEventListener("click", (e)=>{
+      if (e.target.dataset.role === "reorder" || e.target.dataset.role === "toggle") return;
+      card.querySelector('[data-role="detail"]').classList.toggle("open");
+    });
+    card.querySelector('[data-role="toggle"]').addEventListener("click", ()=>{
+      card.querySelector('[data-role="detail"]').classList.remove("open");
+    });
+    card.querySelector('[data-role="reorder"]').addEventListener("click", ()=> reorderBill(b));
+    listEl.appendChild(card);
+  });
+}
+function reorderBill(b){
+  customer = { name: b.customerName||"Guest", contact: b.contact||"", isGuest: !!b.isGuest };
+  cart = [];
+  (b.items||[]).forEach(it=>{
+    // re-match against current menu to pick up latest price where possible
+    let matchedItem = null;
+    MENU.sections.forEach(sec=> sec.items.forEach(mi=>{ if (mi.name===it.name) matchedItem = mi; }));
+    cart.push({
+      lineId: cryptoId(),
+      itemId: matchedItem ? matchedItem.id : cryptoId(),
+      name: it.name,
+      price: matchedItem ? matchedItem.price : it.price,
+      qty: it.qty,
+      addons: it.addons || []
+    });
+  });
+  const savedLoc = localStorage.getItem("event_pos_location") || "";
+  document.getElementById("billLocation").value = b.location || savedLoc;
+  renderMenu(); renderBillPanel();
+  showView("billing");
+}
+
+/* ---------------------------------------------------------------------
+   UTIL
+   --------------------------------------------------------------------- */
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function escapeAttr(s){ return escapeHtml(s); }
+
+/* ---------------------------------------------------------------------
+   INIT
+   --------------------------------------------------------------------- */
+(async function init(){
+  try{
+    await Promise.all([loadMenu(), loadSettings()]);
+    document.getElementById("brandNameDisplay").textContent = SETTINGS.businessName;
+    showView("start");
+  } catch(err){
+    console.error(err);
+    document.querySelector(".wrap").innerHTML = `<div style="padding:60px;text-align:center;color:var(--danger);">
+      Could not connect to Firebase.<br>Check that <code>firebaseConfig</code> at the top of the script has been filled in with your project's real values.</div>`;
+  }
+})();
+</script>
+</body>
+</html>
