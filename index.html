@@ -170,6 +170,10 @@
   .mm-addon-opt-row{display:grid; grid-template-columns:2fr 90px 28px; gap:6px; margin-bottom:6px;}
   .mm-addon-opt-row input{padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.76rem;}
   .chip{font-size:0.62rem; padding:3px 8px; border-radius:20px; background:var(--bg2); border:1px solid var(--border); font-family:'Space Mono',monospace; letter-spacing:1px; text-transform:uppercase;}
+  .tag-badges{display:inline-flex; gap:5px; margin-top:4px; flex-wrap:wrap;}
+  .tag-badge{font-size:0.58rem; padding:2px 7px; border-radius:20px; border:1px solid; font-family:'Space Mono',monospace; letter-spacing:1px; text-transform:uppercase; background:var(--bg2);}
+  .mm-tags{display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border2);}
+  .mm-tags label{display:flex; align-items:center; gap:5px; font-size:0.72rem; cursor:pointer;}
   .mm-toprow{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
   .settings-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:18px; margin-bottom:20px;}
   .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
@@ -314,6 +318,12 @@
         <button class="btn btn-dark" id="btnSaveSettings" style="margin-top:14px;">Save Settings</button>
       </div>
 
+      <div class="settings-card">
+        <h3 style="font-size:0.85rem;margin-bottom:4px;">Add-on Library</h3>
+        <p style="font-size:0.72rem;color:var(--text3);margin-bottom:12px;">Every add-on you create gets saved here so it can be mapped onto other products instead of rebuilding it. Removing one here only removes it from this list — items already using it are unaffected.</p>
+        <div id="addonLibraryList"></div>
+      </div>
+
       <div class="mm-toprow">
         <button class="btn btn-dark" id="btnAddSection">+ Add Section</button>
         <button class="btn btn-outline" id="btnSaveMenu">Save Menu Changes</button>
@@ -449,6 +459,15 @@ const COL_BILLS = "event_bills";
 const DOC_MENU = "event_menu/current";
 const DOC_SETTINGS = "event_config/settings";
 const DOC_COUNTER = "event_counters/billCounter";
+const DOC_ADDON_LIB = "event_addon_library/groups";
+
+const TAG_DEFS = [
+  { key:"veg",      label:"Veg",      color:"#2e7d32" },
+  { key:"nonveg",   label:"Non-Veg",  color:"#a8552f" },
+  { key:"egg",      label:"Egg",      color:"#b8860b" },
+  { key:"beverage", label:"Beverage", color:"#5f6b8a" }
+];
+function tagDef(key){ return TAG_DEFS.find(t=>t.key===key); }
 
 /* ---------------------------------------------------------------------
    DEFAULT SEED DATA (used only if Firestore has nothing yet)
@@ -489,6 +508,9 @@ function defaultMenu(){
 function defaultSettings(){
   return { businessName: "Heebee Coffee", gstin: "03AAFCH0428K1ZV" };
 }
+function defaultAddonLibrary(){
+  return { groups: [] };
+}
 function cryptoId(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
 /* ---------------------------------------------------------------------
@@ -496,6 +518,7 @@ function cryptoId(){ return Math.random().toString(36).slice(2,10) + Date.now().
    --------------------------------------------------------------------- */
 let MENU = null;
 let SETTINGS = null;
+let ADDON_LIBRARY = null;
 let cart = [];              // [{lineId, itemId, name, price, qty, addons:[{name,price}]}]
 let customer = { name:"", contact:"", isGuest:true };
 let unlocked = { manageMenu:false, reports:false };
@@ -523,6 +546,15 @@ async function loadSettings(){
 }
 async function saveSettings(){
   await setDoc(doc(db, DOC_SETTINGS), SETTINGS);
+}
+async function loadAddonLibrary(){
+  const ref = doc(db, DOC_ADDON_LIB);
+  const snap = await getDoc(ref);
+  if (snap.exists()){ ADDON_LIBRARY = snap.data(); }
+  else { ADDON_LIBRARY = defaultAddonLibrary(); await setDoc(ref, ADDON_LIBRARY); }
+}
+async function saveAddonLibrary(){
+  await setDoc(doc(db, DOC_ADDON_LIB), ADDON_LIBRARY);
 }
 async function nextBillNumber(){
   const ref = doc(db, DOC_COUNTER);
@@ -638,6 +670,7 @@ function renderMenu(){
         <div class="item-info">
           <div class="name">${escapeHtml(item.name)}</div>
           <div class="desc">${escapeHtml(item.description||"")}</div>
+          ${tagBadgesHTML(item.tags)}
         </div>
         <div class="item-right">
           <div class="item-price">₹${item.price}</div>
@@ -663,7 +696,7 @@ function handleAddClick(item){
   } else {
     const existing = cart.find(l=>l.itemId===item.id && l.addons.length===0);
     if (existing) existing.qty++;
-    else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:[] });
+    else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:[], tags:item.tags||[] });
     renderMenu(); renderBillPanel();
   }
 }
@@ -726,7 +759,7 @@ document.getElementById("addonConfirm").addEventListener("click", ()=>{
   const addonSig = chosen.map(a=>a.name).sort().join("|");
   const existing = cart.find(l=> l.itemId===item.id && l.addons.map(a=>a.name).sort().join("|")===addonSig );
   if (existing) existing.qty++;
-  else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:chosen });
+  else cart.push({ lineId:cryptoId(), itemId:item.id, name:item.name, price:item.price, qty:1, addons:chosen, tags:item.tags||[] });
   document.getElementById("addonOverlay").classList.remove("active");
   pendingAddonItem = null;
   renderMenu(); renderBillPanel();
@@ -765,6 +798,7 @@ function renderBillPanel(){
           <span>₹${lineTotal(l).toFixed(2)} <span class="bill-line-x" data-line="${l.lineId}">✕</span></span>
         </div>
         ${l.addons.length ? `<div class="bill-line-addons">${l.addons.map(a=>escapeHtml(a.name)).join(", ")}</div>` : ""}
+        ${tagBadgesHTML(l.tags)}
       `;
       row.querySelector(".bill-line-x").addEventListener("click", ()=>{
         cart = cart.filter(x=>x.lineId!==l.lineId);
@@ -796,7 +830,7 @@ function currentBillSnapshot(billNo){
     gstin: SETTINGS.gstin,
     location: document.getElementById("billLocation").value.trim(),
     customerName: customer.name, contact: customer.contact, isGuest: customer.isGuest,
-    items: cart.map(l=>({ name:l.name, price:l.price, qty:l.qty, addons:l.addons })),
+    items: cart.map(l=>({ name:l.name, price:l.price, qty:l.qty, addons:l.addons, tags:l.tags||[] })),
     subtotal: t.subtotal, cgst: t.cgst, sgst: t.sgst, total: t.total,
     createdAtDate: new Date()
   };
@@ -811,7 +845,7 @@ function buildWhatsappText(bill){
   lines.push("");
   bill.items.forEach(it=>{
     const itemTotal = (it.price + it.addons.reduce((s,a)=>s+(a.price||0),0)) * it.qty;
-    let s = `${it.qty}x ${it.name} - ₹${itemTotal.toFixed(2)}`;
+    let s = `${it.qty}x ${it.name}${tagTextShort(it.tags)} - ₹${itemTotal.toFixed(2)}`;
     if (it.addons.length) s += ` (${it.addons.map(a=>a.name).join(", ")})`;
     lines.push(s);
   });
@@ -838,7 +872,7 @@ function buildReceiptHTML(bill){
   const itemRows = bill.items.map(it=>{
     const itemTotal = (it.price + it.addons.reduce((s,a)=>s+(a.price||0),0)) * it.qty;
     const addonsLine = it.addons.length ? `<div style="font-size:0.75rem;color:#555;">${escapeHtml(it.addons.map(a=>a.name).join(", "))}</div>` : "";
-    return `<tr><td>${it.qty}x ${escapeHtml(it.name)}${addonsLine}</td><td style="text-align:right;">₹${itemTotal.toFixed(2)}</td></tr>`;
+    return `<tr><td>${it.qty}x ${escapeHtml(it.name)}${escapeHtml(tagTextShort(it.tags))}${addonsLine}</td><td style="text-align:right;">₹${itemTotal.toFixed(2)}</td></tr>`;
   }).join("");
   return `
     <h2>${escapeHtml(bill.businessName)}</h2>
@@ -920,9 +954,36 @@ document.getElementById("postSaveNewBill").addEventListener("click", ()=>{
 /* ---------------------------------------------------------------------
    MANAGE MENU
    --------------------------------------------------------------------- */
+function renderAddonLibraryCard(){
+  const listEl = document.getElementById("addonLibraryList");
+  const groups = ADDON_LIBRARY.groups || [];
+  if (!groups.length){
+    listEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text3);font-style:italic;">No add-ons in the library yet — create one on any item below and save, it'll show up here.</div>`;
+    return;
+  }
+  listEl.innerHTML = "";
+  groups.forEach(g=>{
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--border2); border-radius:8px; margin-bottom:6px; font-size:0.8rem; background:var(--bg);";
+    row.innerHTML = `<span>${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.map(o=>escapeHtml(o.name)).join(", ")}</span></span>`;
+    const delBtn = document.createElement("button");
+    delBtn.className = "mm-item-x";
+    delBtn.textContent = "✕";
+    delBtn.addEventListener("click", async ()=>{
+      if (!confirm(`Remove "${g.name}" from the add-on library? Items already using it won't be affected.`)) return;
+      ADDON_LIBRARY.groups = ADDON_LIBRARY.groups.filter(x=>x!==g);
+      await saveAddonLibrary();
+      renderAddonLibraryCard();
+    });
+    row.appendChild(delBtn);
+    listEl.appendChild(row);
+  });
+}
+
 function renderManageMenu(){
   document.getElementById("setBusinessName").value = SETTINGS.businessName;
   document.getElementById("setGstin").value = SETTINGS.gstin;
+  renderAddonLibraryCard();
   const wrap = document.getElementById("mmSections");
   wrap.innerHTML = "";
   MENU.sections.forEach(sec=>{
@@ -943,7 +1004,7 @@ function renderManageMenu(){
       renderManageMenu();
     });
     sdiv.querySelector('[data-role="addItem"]').addEventListener("click", ()=>{
-      sec.items.push({ id:cryptoId(), name:"New Item", description:"", price:0, addonGroups:[] });
+      sec.items.push({ id:cryptoId(), name:"New Item", description:"", price:0, addonGroups:[], tags:[] });
       renderManageMenu();
     });
     const itemsWrap = sdiv.querySelector('[data-role="items"]');
@@ -962,12 +1023,27 @@ function renderMMItem(sec, item){
       <input type="number" value="${item.price}" data-role="price" placeholder="Price">
       <button class="mm-item-x" data-role="removeItem">✕</button>
     </div>
+    <div class="mm-tags">
+      ${TAG_DEFS.map(t=>`
+        <label style="color:${t.color};">
+          <input type="checkbox" data-role="tag" data-tag="${t.key}" ${(item.tags||[]).includes(t.key)?"checked":""}> ${escapeHtml(t.label)}
+        </label>
+      `).join("")}
+    </div>
     <button class="mm-addons-toggle" data-role="toggleAddons">+ Add-ons (${item.addonGroups.length})</button>
     <div class="mm-addons" data-role="addonsWrap" style="display:none;"></div>
   `;
   idiv.querySelector('[data-role="name"]').addEventListener("input", e=> item.name=e.target.value);
   idiv.querySelector('[data-role="desc"]').addEventListener("input", e=> item.description=e.target.value);
   idiv.querySelector('[data-role="price"]').addEventListener("input", e=> item.price=parseFloat(e.target.value)||0);
+  idiv.querySelectorAll('[data-role="tag"]').forEach(cb=>{
+    cb.addEventListener("change", e=>{
+      item.tags = item.tags || [];
+      const key = e.target.dataset.tag;
+      if (e.target.checked){ if (!item.tags.includes(key)) item.tags.push(key); }
+      else { item.tags = item.tags.filter(k=>k!==key); }
+    });
+  });
   idiv.querySelector('[data-role="removeItem"]').addEventListener("click", ()=>{
     sec.items = sec.items.filter(i=>i!==item);
     renderManageMenu();
@@ -1033,24 +1109,85 @@ function renderMMAddonGroups(item, wrap){
     });
     wrap.appendChild(gdiv);
   });
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;";
   const addGroupBtn = document.createElement("button");
   addGroupBtn.className = "btn btn-outline";
-  addGroupBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;margin-top:4px;";
-  addGroupBtn.textContent = "+ Add-on Group";
+  addGroupBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;";
+  addGroupBtn.textContent = "+ Create New Add-on";
   addGroupBtn.addEventListener("click", ()=>{
     item.addonGroups.push({ id:cryptoId(), name:"New Group", type:"single", required:false, options:[{name:"Option 1",price:0}] });
     renderMMAddonGroups(item, wrap);
     renderManageMenu();
   });
-  wrap.appendChild(addGroupBtn);
+  const mapBtn = document.createElement("button");
+  mapBtn.className = "btn btn-outline";
+  mapBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;";
+  mapBtn.textContent = "+ Map Existing Add-on";
+  btnRow.appendChild(addGroupBtn);
+  btnRow.appendChild(mapBtn);
+  wrap.appendChild(btnRow);
+
+  const mapPanel = document.createElement("div");
+  mapPanel.style.cssText = "display:none; margin-top:8px; background:var(--card); border-radius:8px; padding:10px;";
+  mapPanel.innerHTML = `
+    <input type="text" placeholder="Search the add-on library (e.g. Milk, Flavour)..." style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:0.78rem; margin-bottom:8px;">
+    <div data-role="mapResults"></div>
+  `;
+  wrap.appendChild(mapPanel);
+  const mapSearchInput = mapPanel.querySelector("input");
+  const mapResultsEl = mapPanel.querySelector('[data-role="mapResults"]');
+  function paintMapResults(q){
+    const ql = (q||"").trim().toLowerCase();
+    const matches = (ADDON_LIBRARY.groups||[]).filter(g=> !ql || g.name.toLowerCase().includes(ql));
+    if (!matches.length){
+      mapResultsEl.innerHTML = `<div style="font-size:0.72rem;color:var(--text3);">No matching add-ons in the library yet. Create a new one instead — it'll be added to the library automatically when you save.</div>`;
+      return;
+    }
+    mapResultsEl.innerHTML = "";
+    matches.forEach(g=>{
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border:1px solid var(--border2); border-radius:6px; margin-bottom:5px; font-size:0.76rem; background:var(--bg2);";
+      row.innerHTML = `<span>${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.length} opt</span></span>`;
+      const useBtn = document.createElement("button");
+      useBtn.className = "btn btn-dark";
+      useBtn.style.cssText = "font-size:0.64rem; padding:5px 10px;";
+      useBtn.textContent = "Use";
+      useBtn.addEventListener("click", ()=>{
+        item.addonGroups.push({ id:cryptoId(), name:g.name, type:g.type, required:false, options:g.options.map(o=>({ name:o.name, price:o.price })) });
+        renderMMAddonGroups(item, wrap);
+        renderManageMenu();
+      });
+      row.appendChild(useBtn);
+      mapResultsEl.appendChild(row);
+    });
+  }
+  mapSearchInput.addEventListener("input", e=> paintMapResults(e.target.value));
+  mapBtn.addEventListener("click", ()=>{
+    const shown = mapPanel.style.display !== "none";
+    mapPanel.style.display = shown ? "none" : "block";
+    if (!shown) paintMapResults("");
+  });
 }
 
 document.getElementById("btnAddSection").addEventListener("click", ()=>{
   MENU.sections.push({ id:cryptoId(), name:"New Section", items:[] });
   renderManageMenu();
 });
+function syncAddonLibraryFromMenu(){
+  MENU.sections.forEach(sec=> sec.items.forEach(item=>{
+    (item.addonGroups||[]).forEach(g=>{
+      const exists = ADDON_LIBRARY.groups.find(lg=> lg.name.trim().toLowerCase()===g.name.trim().toLowerCase());
+      if (!exists){
+        ADDON_LIBRARY.groups.push({ id:cryptoId(), name:g.name, type:g.type, options:g.options.map(o=>({ name:o.name, price:o.price })) });
+      }
+    });
+  }));
+}
 document.getElementById("btnSaveMenu").addEventListener("click", async ()=>{
-  await saveMenu();
+  syncAddonLibraryFromMenu();
+  await Promise.all([saveMenu(), saveAddonLibrary()]);
+  renderAddonLibraryCard();
   alert("Menu saved.");
 });
 document.getElementById("btnSaveSettings").addEventListener("click", async ()=>{
@@ -1258,7 +1395,8 @@ function reorderBill(b){
       name: it.name,
       price: matchedItem ? matchedItem.price : it.price,
       qty: it.qty,
-      addons: it.addons || []
+      addons: it.addons || [],
+      tags: matchedItem ? (matchedItem.tags||[]) : (it.tags||[])
     });
   });
   const savedLoc = localStorage.getItem("event_pos_location") || "";
@@ -1271,6 +1409,18 @@ function reorderBill(b){
    UTIL
    --------------------------------------------------------------------- */
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function tagBadgesHTML(tags){
+  if (!tags || !tags.length) return "";
+  return `<span class="tag-badges">${tags.map(k=>{
+    const t = tagDef(k); if (!t) return "";
+    return `<span class="tag-badge" style="color:${t.color};border-color:${t.color};">${escapeHtml(t.label)}</span>`;
+  }).join("")}</span>`;
+}
+function tagTextShort(tags){
+  if (!tags || !tags.length) return "";
+  const labels = tags.map(k=>{ const t = tagDef(k); return t ? t.label : null; }).filter(Boolean);
+  return labels.length ? ` [${labels.join(", ")}]` : "";
+}
 function escapeAttr(s){ return escapeHtml(s); }
 
 /* ---------------------------------------------------------------------
@@ -1278,13 +1428,19 @@ function escapeAttr(s){ return escapeHtml(s); }
    --------------------------------------------------------------------- */
 (async function init(){
   try{
-    await Promise.all([loadMenu(), loadSettings()]);
+    await Promise.all([loadMenu(), loadSettings(), loadAddonLibrary()]);
     document.getElementById("brandNameDisplay").textContent = SETTINGS.businessName;
     showView("start");
   } catch(err){
     console.error(err);
-    document.querySelector(".wrap").innerHTML = `<div style="padding:60px;text-align:center;color:var(--danger);">
-      Could not connect to Firebase.<br>Check that <code>firebaseConfig</code> at the top of the script has been filled in with your project's real values.</div>`;
+    const isPermission = err && (err.code === "permission-denied" || /permission/i.test(err.message||""));
+    document.querySelector(".wrap").innerHTML = isPermission
+      ? `<div style="padding:60px;text-align:center;color:var(--danger);">
+          Firebase connected, but access was denied.<br>Your Firestore Security Rules don't allow read/write on one of the collections this app uses
+          (<code>event_bills</code>, <code>event_menu</code>, <code>event_config</code>, <code>event_counters</code>, <code>event_addon_library</code>).<br>
+          Open Firebase Console → Firestore Database → Rules and make sure all five are covered, then reload.</div>`
+      : `<div style="padding:60px;text-align:center;color:var(--danger);">
+          Could not connect to Firebase.<br>Check that <code>firebaseConfig</code> at the top of the script has been filled in with your project's real values.</div>`;
   }
 })();
 </script>
