@@ -412,6 +412,29 @@
   </div>
 </div>
 
+<!-- CREATE ADD-ON CONFIRM MODAL -->
+<div class="overlay" id="createAddonOverlay">
+  <div class="modal">
+    <h3>Create New Add-on</h3>
+    <p style="font-size:0.78rem;color:var(--text3);margin-bottom:14px;">This creates a shared add-on in the library. Editing it later (name, options, prices) will update it everywhere it's mapped.</p>
+    <div class="field">
+      <label class="label">Add-on Name</label>
+      <input type="text" id="createAddonName" placeholder="e.g. Milk, Flavour, Sugar Level">
+    </div>
+    <div class="field">
+      <label class="label">Selection Type</label>
+      <select id="createAddonType" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);font-size:0.85rem;">
+        <option value="single">Single choice (radio)</option>
+        <option value="multi">Multiple choice (checkbox)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="createAddonCancel">Cancel</button>
+      <button class="btn btn-dark" id="createAddonConfirm">Create Add-on</button>
+    </div>
+  </div>
+</div>
+
 <!-- PRINT-ONLY RECEIPT AREA -->
 <div id="printArea" style="display:none;"></div>
 
@@ -711,24 +734,29 @@ function handleRemoveClick(item){
 /* ---------------------------------------------------------------------
    ADDON MODAL
    --------------------------------------------------------------------- */
+function resolveAddonGroup(ref){
+  return (ADDON_LIBRARY.groups||[]).find(g=>g.id===ref.libraryId) || null;
+}
 function openAddonModal(item){
   pendingAddonItem = item;
   document.getElementById("addonModalName").textContent = item.name;
   document.getElementById("addonModalPrice").textContent = "Base price ₹" + item.price;
   const groupsEl = document.getElementById("addonModalGroups");
   groupsEl.innerHTML = "";
-  item.addonGroups.forEach(g=>{
+  item.addonGroups.forEach(ref=>{
+    const g = resolveAddonGroup(ref);
+    if (!g) return;
     const gdiv = document.createElement("div");
     gdiv.className = "addon-group";
-    gdiv.dataset.groupId = g.id;
+    gdiv.dataset.groupId = ref.id;
     gdiv.dataset.type = g.type;
-    gdiv.dataset.required = g.required ? "1":"0";
-    gdiv.innerHTML = `<div class="gname"><span>${escapeHtml(g.name)}</span>${g.required?'<span class="greq">Required</span>':''}</div>`;
+    gdiv.dataset.required = ref.required ? "1":"0";
+    gdiv.innerHTML = `<div class="gname"><span>${escapeHtml(g.name)}</span>${ref.required?'<span class="greq">Required</span>':''}</div>`;
     g.options.forEach((opt,i)=>{
       const optRow = document.createElement("label");
       optRow.className = "addon-opt";
       const inputType = g.type === "single" ? "radio" : "checkbox";
-      optRow.innerHTML = `<input type="${inputType}" name="grp-${g.id}" value="${i}"><span>${escapeHtml(opt.name)}</span><span class="oprice">${opt.price?('+₹'+opt.price):''}</span>`;
+      optRow.innerHTML = `<input type="${inputType}" name="grp-${ref.id}" value="${i}"><span>${escapeHtml(opt.name)}</span><span class="oprice">${opt.price?('+₹'+opt.price):''}</span>`;
       gdiv.appendChild(optRow);
     });
     groupsEl.appendChild(gdiv);
@@ -747,7 +775,8 @@ document.getElementById("addonConfirm").addEventListener("click", ()=>{
   document.querySelectorAll("#addonModalGroups .addon-group").forEach(gdiv=>{
     const gid = gdiv.dataset.groupId;
     const required = gdiv.dataset.required === "1";
-    const group = item.addonGroups.find(g=>g.id===gid);
+    const ref = item.addonGroups.find(g=>g.id===gid);
+    const group = resolveAddonGroup(ref);
     const checked = gdiv.querySelectorAll("input:checked");
     if (required && checked.length===0) missingRequired = true;
     checked.forEach(inp=>{
@@ -954,31 +983,148 @@ document.getElementById("postSaveNewBill").addEventListener("click", ()=>{
 /* ---------------------------------------------------------------------
    MANAGE MENU
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   ADD-ON LIBRARY (shared, edit-once-updates-everywhere)
+   --------------------------------------------------------------------- */
+function itemsUsingLibraryGroup(libId){
+  const out = [];
+  MENU.sections.forEach(sec=> sec.items.forEach(item=>{
+    if ((item.addonGroups||[]).some(ref=>ref.libraryId===libId)) out.push(item.name);
+  }));
+  return out;
+}
+function renderAddonGroupEditor(g, container, onChange){
+  container.innerHTML = "";
+  const hd = document.createElement("div");
+  hd.className = "mm-addon-group-hd";
+  hd.innerHTML = `
+    <input type="text" value="${escapeAttr(g.name)}" data-role="gname" placeholder="Group name e.g. Flavour">
+    <select data-role="gtype">
+      <option value="single" ${g.type==="single"?"selected":""}>Single (radio)</option>
+      <option value="multi" ${g.type==="multi"?"selected":""}>Multi (checkbox)</option>
+    </select>
+  `;
+  hd.querySelector('[data-role="gname"]').addEventListener("input", e=>{ g.name=e.target.value; onChange && onChange(); });
+  hd.querySelector('[data-role="gtype"]').addEventListener("change", e=>{ g.type=e.target.value; onChange && onChange(); });
+  container.appendChild(hd);
+  const optsWrap = document.createElement("div");
+  container.appendChild(optsWrap);
+  function paintOpts(){
+    optsWrap.innerHTML = "";
+    g.options.forEach(opt=>{
+      const orow = document.createElement("div");
+      orow.className = "mm-addon-opt-row";
+      orow.innerHTML = `
+        <input type="text" value="${escapeAttr(opt.name)}" data-role="oname" placeholder="Option name">
+        <input type="number" value="${opt.price}" data-role="oprice" placeholder="Extra ₹">
+        <button class="mm-item-x" data-role="removeOpt">✕</button>
+      `;
+      orow.querySelector('[data-role="oname"]').addEventListener("input", e=>{ opt.name=e.target.value; onChange && onChange(); });
+      orow.querySelector('[data-role="oprice"]').addEventListener("input", e=>{ opt.price=parseFloat(e.target.value)||0; onChange && onChange(); });
+      orow.querySelector('[data-role="removeOpt"]').addEventListener("click", ()=>{
+        g.options = g.options.filter(o=>o!==opt);
+        paintOpts();
+        onChange && onChange();
+      });
+      optsWrap.appendChild(orow);
+    });
+  }
+  paintOpts();
+  const addOptBtn = document.createElement("button");
+  addOptBtn.className = "btn btn-outline";
+  addOptBtn.style.cssText = "font-size:0.68rem;padding:6px 10px;margin-top:4px;";
+  addOptBtn.textContent = "+ Option";
+  addOptBtn.addEventListener("click", ()=>{
+    g.options.push({ name:"New Option", price:0 });
+    paintOpts();
+    onChange && onChange();
+  });
+  container.appendChild(addOptBtn);
+}
+
 function renderAddonLibraryCard(){
   const listEl = document.getElementById("addonLibraryList");
   const groups = ADDON_LIBRARY.groups || [];
-  if (!groups.length){
-    listEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text3);font-style:italic;">No add-ons in the library yet — create one on any item below and save, it'll show up here.</div>`;
-    return;
-  }
   listEl.innerHTML = "";
+  if (!groups.length){
+    listEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text3);font-style:italic;margin-bottom:10px;">No add-ons in the library yet — create the first one below.</div>`;
+  }
   groups.forEach(g=>{
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--border2); border-radius:8px; margin-bottom:6px; font-size:0.8rem; background:var(--bg);";
-    row.innerHTML = `<span>${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.map(o=>escapeHtml(o.name)).join(", ")}</span></span>`;
+    const card = document.createElement("div");
+    card.style.cssText = "border:1px solid var(--border2); border-radius:8px; margin-bottom:8px; background:var(--bg); overflow:hidden;";
+    const hdRow = document.createElement("div");
+    hdRow.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:10px 12px; cursor:pointer;";
+    hdRow.innerHTML = `<span style="font-size:0.82rem;">${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.length} opt</span></span>`;
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex; gap:8px; align-items:center;";
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-outline";
+    editBtn.style.cssText = "font-size:0.65rem;padding:5px 10px;";
+    editBtn.textContent = "Edit";
     const delBtn = document.createElement("button");
     delBtn.className = "mm-item-x";
     delBtn.textContent = "✕";
-    delBtn.addEventListener("click", async ()=>{
-      if (!confirm(`Remove "${g.name}" from the add-on library? Items already using it won't be affected.`)) return;
-      ADDON_LIBRARY.groups = ADDON_LIBRARY.groups.filter(x=>x!==g);
-      await saveAddonLibrary();
-      renderAddonLibraryCard();
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    hdRow.appendChild(actions);
+    card.appendChild(hdRow);
+    const body = document.createElement("div");
+    body.style.cssText = "display:none; padding:0 12px 12px;";
+    card.appendChild(body);
+    editBtn.addEventListener("click", ()=>{
+      const open = body.style.display !== "none";
+      body.style.display = open ? "none" : "block";
+      if (!open) renderAddonGroupEditor(g, body, ()=>{ hdRow.querySelector("span").innerHTML = `${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.length} opt</span>`; });
     });
-    row.appendChild(delBtn);
-    listEl.appendChild(row);
+    delBtn.addEventListener("click", async ()=>{
+      const usedBy = itemsUsingLibraryGroup(g.id);
+      const msg = usedBy.length
+        ? `"${g.name}" is used by ${usedBy.length} item(s): ${usedBy.join(", ")}. Deleting it will remove it from all of them. Continue?`
+        : `Delete "${g.name}" from the add-on library?`;
+      if (!confirm(msg)) return;
+      MENU.sections.forEach(sec=> sec.items.forEach(item=>{
+        item.addonGroups = (item.addonGroups||[]).filter(ref=>ref.libraryId!==g.id);
+      }));
+      ADDON_LIBRARY.groups = ADDON_LIBRARY.groups.filter(x=>x!==g);
+      await Promise.all([saveAddonLibrary(), saveMenu()]);
+      renderManageMenu();
+    });
+    listEl.appendChild(card);
   });
+  const createBtn = document.createElement("button");
+  createBtn.className = "btn btn-dark";
+  createBtn.style.cssText = "margin-top:4px;";
+  createBtn.textContent = "+ Create New Add-on";
+  createBtn.addEventListener("click", ()=> openCreateAddonModal(null));
+  listEl.appendChild(createBtn);
 }
+
+/* ---------------------------------------------------------------------
+   CREATE ADD-ON CONFIRMATION MODAL
+   --------------------------------------------------------------------- */
+let pendingCreateAddonItem = null;
+function openCreateAddonModal(item){
+  pendingCreateAddonItem = item;
+  document.getElementById("createAddonName").value = "";
+  document.getElementById("createAddonType").value = "single";
+  document.getElementById("createAddonOverlay").classList.add("active");
+}
+document.getElementById("createAddonCancel").addEventListener("click", ()=>{
+  document.getElementById("createAddonOverlay").classList.remove("active");
+});
+document.getElementById("createAddonConfirm").addEventListener("click", async ()=>{
+  const name = document.getElementById("createAddonName").value.trim();
+  if (!name){ alert("Please enter a name for the add-on."); return; }
+  const type = document.getElementById("createAddonType").value;
+  const newGroup = { id:cryptoId(), name, type, options:[{name:"Option 1",price:0}] };
+  ADDON_LIBRARY.groups.push(newGroup);
+  if (pendingCreateAddonItem){
+    pendingCreateAddonItem.addonGroups.push({ id:cryptoId(), libraryId:newGroup.id, required:false });
+  }
+  await saveAddonLibrary();
+  document.getElementById("createAddonOverlay").classList.remove("active");
+  renderManageMenu();
+});
 
 function renderManageMenu(){
   document.getElementById("setBusinessName").value = SETTINGS.businessName;
@@ -1060,52 +1206,45 @@ function renderMMItem(sec, item){
 
 function renderMMAddonGroups(item, wrap){
   wrap.innerHTML = "";
-  item.addonGroups.forEach(g=>{
+  item.addonGroups.forEach(ref=>{
+    const g = resolveAddonGroup(ref);
+    if (!g) return;
     const gdiv = document.createElement("div");
     gdiv.className = "mm-addon-group";
-    gdiv.innerHTML = `
-      <div class="mm-addon-group-hd">
-        <input type="text" value="${escapeAttr(g.name)}" data-role="gname" placeholder="Group name e.g. Flavour">
-        <select data-role="gtype">
-          <option value="single" ${g.type==="single"?"selected":""}>Single (radio)</option>
-          <option value="multi" ${g.type==="multi"?"selected":""}>Multi (checkbox)</option>
-        </select>
-        <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;">
-          <input type="checkbox" data-role="grequired" ${g.required?"checked":""}> Required
-        </label>
-        <button class="mm-item-x" data-role="removeGroup">✕</button>
-      </div>
-      <div data-role="opts"></div>
-      <button class="btn btn-outline" data-role="addOpt" style="font-size:0.68rem;padding:6px 10px;">+ Option</button>
+    const hd = document.createElement("div");
+    hd.className = "mm-addon-group-hd";
+    hd.innerHTML = `
+      <span style="flex:1;font-size:0.8rem;font-weight:700;">${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.length} opt</span></span>
+      <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" data-role="grequired" ${ref.required?"checked":""}> Required
+      </label>
+      <button class="btn btn-outline" data-role="editInLibrary" style="font-size:0.64rem;padding:5px 10px;">Edit</button>
+      <button class="mm-item-x" data-role="removeGroup" title="Remove from this item">✕</button>
     `;
-    gdiv.querySelector('[data-role="gname"]').addEventListener("input", e=> g.name=e.target.value);
-    gdiv.querySelector('[data-role="gtype"]').addEventListener("change", e=> g.type=e.target.value);
-    gdiv.querySelector('[data-role="grequired"]').addEventListener("change", e=> g.required=e.target.checked);
-    gdiv.querySelector('[data-role="removeGroup"]').addEventListener("click", ()=>{
-      item.addonGroups = item.addonGroups.filter(x=>x!==g);
+    gdiv.appendChild(hd);
+    const editBody = document.createElement("div");
+    editBody.style.cssText = "display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border2);";
+    gdiv.appendChild(editBody);
+    hd.querySelector('[data-role="grequired"]').addEventListener("change", e=> ref.required=e.target.checked);
+    hd.querySelector('[data-role="editInLibrary"]').addEventListener("click", ()=>{
+      const open = editBody.style.display !== "none";
+      editBody.style.display = open ? "none" : "block";
+      if (!open){
+        const note = document.createElement("p");
+        note.style.cssText = "font-size:0.7rem;color:var(--text3);margin-bottom:8px;";
+        note.textContent = "Editing here updates this add-on everywhere it's mapped, not just this item.";
+        editBody.appendChild(note);
+        const editorDiv = document.createElement("div");
+        editBody.appendChild(editorDiv);
+        renderAddonGroupEditor(g, editorDiv, ()=>{
+          hd.querySelector("span").innerHTML = `${escapeHtml(g.name)} <span class="chip">${g.type==="single"?"radio":"multi"} · ${g.options.length} opt</span>`;
+        });
+      }
+    });
+    hd.querySelector('[data-role="removeGroup"]').addEventListener("click", ()=>{
+      item.addonGroups = item.addonGroups.filter(x=>x!==ref);
       renderMMAddonGroups(item, wrap);
       renderManageMenu();
-    });
-    const optsWrap = gdiv.querySelector('[data-role="opts"]');
-    g.options.forEach(opt=>{
-      const orow = document.createElement("div");
-      orow.className = "mm-addon-opt-row";
-      orow.innerHTML = `
-        <input type="text" value="${escapeAttr(opt.name)}" data-role="oname" placeholder="Option name">
-        <input type="number" value="${opt.price}" data-role="oprice" placeholder="Extra ₹">
-        <button class="mm-item-x" data-role="removeOpt">✕</button>
-      `;
-      orow.querySelector('[data-role="oname"]').addEventListener("input", e=> opt.name=e.target.value);
-      orow.querySelector('[data-role="oprice"]').addEventListener("input", e=> opt.price=parseFloat(e.target.value)||0);
-      orow.querySelector('[data-role="removeOpt"]').addEventListener("click", ()=>{
-        g.options = g.options.filter(o=>o!==opt);
-        renderMMAddonGroups(item, wrap);
-      });
-      optsWrap.appendChild(orow);
-    });
-    gdiv.querySelector('[data-role="addOpt"]').addEventListener("click", ()=>{
-      g.options.push({ name:"New Option", price:0 });
-      renderMMAddonGroups(item, wrap);
     });
     wrap.appendChild(gdiv);
   });
@@ -1115,11 +1254,7 @@ function renderMMAddonGroups(item, wrap){
   addGroupBtn.className = "btn btn-outline";
   addGroupBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;";
   addGroupBtn.textContent = "+ Create New Add-on";
-  addGroupBtn.addEventListener("click", ()=>{
-    item.addonGroups.push({ id:cryptoId(), name:"New Group", type:"single", required:false, options:[{name:"Option 1",price:0}] });
-    renderMMAddonGroups(item, wrap);
-    renderManageMenu();
-  });
+  addGroupBtn.addEventListener("click", ()=> openCreateAddonModal(item));
   const mapBtn = document.createElement("button");
   mapBtn.className = "btn btn-outline";
   mapBtn.style.cssText = "font-size:0.7rem;padding:7px 12px;";
@@ -1139,9 +1274,10 @@ function renderMMAddonGroups(item, wrap){
   const mapResultsEl = mapPanel.querySelector('[data-role="mapResults"]');
   function paintMapResults(q){
     const ql = (q||"").trim().toLowerCase();
-    const matches = (ADDON_LIBRARY.groups||[]).filter(g=> !ql || g.name.toLowerCase().includes(ql));
+    const alreadyMapped = new Set(item.addonGroups.map(r=>r.libraryId));
+    const matches = (ADDON_LIBRARY.groups||[]).filter(g=> !alreadyMapped.has(g.id) && (!ql || g.name.toLowerCase().includes(ql)));
     if (!matches.length){
-      mapResultsEl.innerHTML = `<div style="font-size:0.72rem;color:var(--text3);">No matching add-ons in the library yet. Create a new one instead — it'll be added to the library automatically when you save.</div>`;
+      mapResultsEl.innerHTML = `<div style="font-size:0.72rem;color:var(--text3);">No matching add-ons. Use "+ Create New Add-on" to make one.</div>`;
       return;
     }
     mapResultsEl.innerHTML = "";
@@ -1154,7 +1290,7 @@ function renderMMAddonGroups(item, wrap){
       useBtn.style.cssText = "font-size:0.64rem; padding:5px 10px;";
       useBtn.textContent = "Use";
       useBtn.addEventListener("click", ()=>{
-        item.addonGroups.push({ id:cryptoId(), name:g.name, type:g.type, required:false, options:g.options.map(o=>({ name:o.name, price:o.price })) });
+        item.addonGroups.push({ id:cryptoId(), libraryId:g.id, required:false });
         renderMMAddonGroups(item, wrap);
         renderManageMenu();
       });
@@ -1174,20 +1310,8 @@ document.getElementById("btnAddSection").addEventListener("click", ()=>{
   MENU.sections.push({ id:cryptoId(), name:"New Section", items:[] });
   renderManageMenu();
 });
-function syncAddonLibraryFromMenu(){
-  MENU.sections.forEach(sec=> sec.items.forEach(item=>{
-    (item.addonGroups||[]).forEach(g=>{
-      const exists = ADDON_LIBRARY.groups.find(lg=> lg.name.trim().toLowerCase()===g.name.trim().toLowerCase());
-      if (!exists){
-        ADDON_LIBRARY.groups.push({ id:cryptoId(), name:g.name, type:g.type, options:g.options.map(o=>({ name:o.name, price:o.price })) });
-      }
-    });
-  }));
-}
 document.getElementById("btnSaveMenu").addEventListener("click", async ()=>{
-  syncAddonLibraryFromMenu();
   await Promise.all([saveMenu(), saveAddonLibrary()]);
-  renderAddonLibraryCard();
   alert("Menu saved.");
 });
 document.getElementById("btnSaveSettings").addEventListener("click", async ()=>{
@@ -1426,9 +1550,30 @@ function escapeAttr(s){ return escapeHtml(s); }
 /* ---------------------------------------------------------------------
    INIT
    --------------------------------------------------------------------- */
+function migrateAddonGroupsToLibrary(){
+  let changed = false;
+  MENU.sections.forEach(sec=> sec.items.forEach(item=>{
+    (item.addonGroups||[]).forEach((ref, idx)=>{
+      if (ref.libraryId) return; // already migrated
+      changed = true;
+      const legacyName = (ref.name||"").trim();
+      let lib = ADDON_LIBRARY.groups.find(lg=> lg.name.trim().toLowerCase()===legacyName.toLowerCase());
+      if (!lib){
+        lib = { id:cryptoId(), name: legacyName || "Add-on", type: ref.type||"single", options: (ref.options||[]).map(o=>({ name:o.name, price:o.price })) };
+        ADDON_LIBRARY.groups.push(lib);
+      }
+      item.addonGroups[idx] = { id: ref.id || cryptoId(), libraryId: lib.id, required: !!ref.required };
+    });
+  }));
+  return changed;
+}
+
 (async function init(){
   try{
     await Promise.all([loadMenu(), loadSettings(), loadAddonLibrary()]);
+    if (migrateAddonGroupsToLibrary()){
+      await Promise.all([saveMenu(), saveAddonLibrary()]);
+    }
     document.getElementById("brandNameDisplay").textContent = SETTINGS.businessName;
     showView("start");
   } catch(err){
