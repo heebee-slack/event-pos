@@ -206,10 +206,15 @@
   ::-webkit-scrollbar{width:6px; height:6px;}
   ::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
 
+  #printArea{padding:20px; font-family:'Nunito Sans',sans-serif; color:#111;}
+  #printArea h2{font-size:1.2rem; margin-bottom:2px;}
+  #printArea .pr-meta{font-size:0.8rem; color:#555; margin-bottom:14px;}
+  #printArea table{margin-bottom:14px;}
+  #printArea td,#printArea th{border-color:#ccc;}
   @media print{
-    .topnav,.bill-actions,.billing-grid > div:first-child,.overlay{display:none !important;}
+    body > *:not(#printArea){display:none !important;}
+    #printArea{display:block !important;}
     body{background:#fff;}
-    .bill-panel{position:static; box-shadow:none; border:none;}
   }
 </style>
 </head>
@@ -333,6 +338,7 @@
         <input type="date" id="repFrom" style="display:none;">
         <input type="date" id="repTo" style="display:none;">
         <button class="btn btn-outline" id="btnRunReport">Run</button>
+        <button class="btn btn-danger" id="btnClearAllBills" style="margin-left:auto;">Clear All Bills</button>
       </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="label">Bills</div><div class="val" id="repBills">0</div></div>
@@ -383,6 +389,22 @@
   </div>
 </div>
 
+<!-- POST-SAVE MODAL -->
+<div class="overlay" id="postSaveOverlay">
+  <div class="modal">
+    <h3 id="postSaveTitle">Bill Saved</h3>
+    <div class="mprice" id="postSaveSubtitle"></div>
+    <div class="modal-actions" style="flex-direction:column;">
+      <button class="btn btn-outline btn-block" id="postSavePrint">Print / PDF</button>
+      <button class="btn btn-outline btn-block" id="postSaveWhatsapp">Send WhatsApp</button>
+      <button class="btn btn-dark btn-block" id="postSaveNewBill">Start New Bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT-ONLY RECEIPT AREA -->
+<div id="printArea" style="display:none;"></div>
+
 <!-- PIN MODAL -->
 <div class="overlay" id="pinOverlay">
   <div class="modal pin-box">
@@ -399,7 +421,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, addDoc, runTransaction,
+  getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, runTransaction,
   query, where, orderBy, getDocs, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -422,6 +444,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const STAFF_PIN = "3970";
+const CLEAR_PASSWORD = "Gavish@786";
 const COL_BILLS = "event_bills";
 const DOC_MENU = "event_menu/current";
 const DOC_SETTINGS = "event_config/settings";
@@ -478,6 +501,7 @@ let customer = { name:"", contact:"", isGuest:true };
 let unlocked = { manageMenu:false, reports:false };
 let pendingPinTarget = null;
 let pendingAddonItem = null;
+let lastSavedBill = null;
 
 /* ---------------------------------------------------------------------
    FIRESTORE LOAD/SAVE
@@ -764,29 +788,119 @@ document.getElementById("billLocation").addEventListener("input", e=>{
   localStorage.setItem("event_pos_location", e.target.value);
 });
 
+function currentBillSnapshot(billNo){
+  const t = billTotals();
+  return {
+    businessName: SETTINGS.businessName,
+    billNo: billNo || null,
+    gstin: SETTINGS.gstin,
+    location: document.getElementById("billLocation").value.trim(),
+    customerName: customer.name, contact: customer.contact, isGuest: customer.isGuest,
+    items: cart.map(l=>({ name:l.name, price:l.price, qty:l.qty, addons:l.addons })),
+    subtotal: t.subtotal, cgst: t.cgst, sgst: t.sgst, total: t.total,
+    createdAtDate: new Date()
+  };
+}
+
+function buildWhatsappText(bill){
+  const lines = [];
+  lines.push(`*${bill.businessName}*`);
+  lines.push(`Bill No: ${bill.billNo ? "#"+bill.billNo : "(unsaved)"}`);
+  lines.push(`Date: ${bill.createdAtDate.toLocaleString()}`);
+  if (bill.location) lines.push(`Location: ${bill.location}`);
+  lines.push("");
+  bill.items.forEach(it=>{
+    const itemTotal = (it.price + it.addons.reduce((s,a)=>s+(a.price||0),0)) * it.qty;
+    let s = `${it.qty}x ${it.name} - ₹${itemTotal.toFixed(2)}`;
+    if (it.addons.length) s += ` (${it.addons.map(a=>a.name).join(", ")})`;
+    lines.push(s);
+  });
+  lines.push("");
+  lines.push(`Subtotal: ₹${bill.subtotal.toFixed(2)}`);
+  lines.push(`CGST (2.5%): ₹${bill.cgst.toFixed(2)}`);
+  lines.push(`SGST (2.5%): ₹${bill.sgst.toFixed(2)}`);
+  lines.push(`Total: ₹${bill.total.toFixed(2)}`);
+  lines.push("");
+  lines.push(`GSTIN: ${bill.gstin}`);
+  lines.push("Thank you for visiting!");
+  return lines.join("\n");
+}
+
+function sendBillOnWhatsapp(bill){
+  if (!bill.contact){ alert("No contact number on this bill (guest billing) — nothing to send."); return; }
+  const text = encodeURIComponent(buildWhatsappText(bill));
+  let digits = bill.contact.replace(/\D/g,"");
+  if (digits.length===10) digits = "91"+digits;
+  window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
+}
+
+function buildReceiptHTML(bill){
+  const itemRows = bill.items.map(it=>{
+    const itemTotal = (it.price + it.addons.reduce((s,a)=>s+(a.price||0),0)) * it.qty;
+    const addonsLine = it.addons.length ? `<div style="font-size:0.75rem;color:#555;">${escapeHtml(it.addons.map(a=>a.name).join(", "))}</div>` : "";
+    return `<tr><td>${it.qty}x ${escapeHtml(it.name)}${addonsLine}</td><td style="text-align:right;">₹${itemTotal.toFixed(2)}</td></tr>`;
+  }).join("");
+  return `
+    <h2>${escapeHtml(bill.businessName)}</h2>
+    <div class="pr-meta">
+      Bill No: ${bill.billNo ? "#"+bill.billNo : "(unsaved)"}<br>
+      Date: ${bill.createdAtDate.toLocaleString()}<br>
+      ${bill.location ? "Location: "+escapeHtml(bill.location)+"<br>" : ""}
+      Customer: ${bill.isGuest ? "Guest" : escapeHtml(bill.customerName)+(bill.contact?" · "+escapeHtml(bill.contact):"")}<br>
+      GSTIN: ${escapeHtml(bill.gstin)}
+    </div>
+    <table>${itemRows}</table>
+    <table>
+      <tr><td>Subtotal</td><td style="text-align:right;">₹${bill.subtotal.toFixed(2)}</td></tr>
+      <tr><td>CGST (2.5%)</td><td style="text-align:right;">₹${bill.cgst.toFixed(2)}</td></tr>
+      <tr><td>SGST (2.5%)</td><td style="text-align:right;">₹${bill.sgst.toFixed(2)}</td></tr>
+      <tr><td><b>Total</b></td><td style="text-align:right;"><b>₹${bill.total.toFixed(2)}</b></td></tr>
+    </table>
+    <p>Thank you for visiting!</p>
+  `;
+}
+
+function printBill(bill){
+  document.getElementById("printArea").innerHTML = buildReceiptHTML(bill);
+  window.print();
+}
+
+document.getElementById("btnPrintBill").addEventListener("click", ()=>{
+  if (!cart.length){ alert("Add at least one item first."); return; }
+  printBill(currentBillSnapshot(null));
+});
+document.getElementById("btnWhatsappBill").addEventListener("click", ()=>{
+  if (!cart.length){ alert("Add at least one item first."); return; }
+  sendBillOnWhatsapp(currentBillSnapshot(null));
+});
+
 document.getElementById("btnFinishBill").addEventListener("click", async ()=>{
   if (!cart.length){ alert("Add at least one item before finishing the bill."); return; }
   const btn = document.getElementById("btnFinishBill");
   btn.disabled = true; btn.textContent = "Saving...";
   try{
     const billNo = await nextBillNumber();
-    const t = billTotals();
+    const snapshot = currentBillSnapshot(billNo);
     const billDoc = {
       billNo,
       customerName: customer.name,
       contact: customer.contact,
       isGuest: customer.isGuest,
-      location: document.getElementById("billLocation").value.trim(),
+      location: snapshot.location,
       gstin: SETTINGS.gstin,
       businessName: SETTINGS.businessName,
-      items: cart.map(l=>({ name:l.name, price:l.price, qty:l.qty, addons:l.addons })),
-      subtotal: t.subtotal, cgst: t.cgst, sgst: t.sgst, total: t.total,
+      items: snapshot.items,
+      subtotal: snapshot.subtotal, cgst: snapshot.cgst, sgst: snapshot.sgst, total: snapshot.total,
       createdAt: Timestamp.now()
     };
     await addDoc(collection(db, COL_BILLS), billDoc);
-    window.__lastBill = billDoc;
-    document.getElementById("billMetaLine").textContent = `GSTIN: ${SETTINGS.gstin} · Bill No: #${billNo} · Saved ✓`;
-    alert(`Bill #${billNo} saved.`);
+    lastSavedBill = snapshot;
+    cart = [];
+    renderMenu(); renderBillPanel();
+    document.getElementById("postSaveTitle").textContent = `Bill #${billNo} Saved`;
+    document.getElementById("postSaveSubtitle").textContent = `Total ₹${snapshot.total.toFixed(2)}`;
+    document.getElementById("postSaveWhatsapp").style.display = snapshot.contact ? "block" : "none";
+    document.getElementById("postSaveOverlay").classList.add("active");
   } catch(err){
     console.error(err);
     alert("Could not save bill — check Firebase config/connection.");
@@ -795,35 +909,12 @@ document.getElementById("btnFinishBill").addEventListener("click", async ()=>{
   }
 });
 
-document.getElementById("btnPrintBill").addEventListener("click", ()=>{ window.print(); });
-
-document.getElementById("btnWhatsappBill").addEventListener("click", ()=>{
-  if (!customer.contact){ alert("No contact number on this bill (guest billing) — nothing to send."); return; }
-  const t = billTotals();
-  const lines = [];
-  lines.push(`*${SETTINGS.businessName}*`);
-  lines.push(`Bill No: #${window.__lastBill ? window.__lastBill.billNo : "(unsaved)"}`);
-  lines.push(`Date: ${new Date().toLocaleString()}`);
-  const loc = document.getElementById("billLocation").value.trim();
-  if (loc) lines.push(`Location: ${loc}`);
-  lines.push("");
-  cart.forEach(l=>{
-    let s = `${l.qty}x ${l.name} - ₹${lineTotal(l).toFixed(2)}`;
-    if (l.addons.length) s += ` (${l.addons.map(a=>a.name).join(", ")})`;
-    lines.push(s);
-  });
-  lines.push("");
-  lines.push(`Subtotal: ₹${t.subtotal.toFixed(2)}`);
-  lines.push(`CGST (2.5%): ₹${t.cgst.toFixed(2)}`);
-  lines.push(`SGST (2.5%): ₹${t.sgst.toFixed(2)}`);
-  lines.push(`Total: ₹${t.total.toFixed(2)}`);
-  lines.push("");
-  lines.push(`GSTIN: ${SETTINGS.gstin}`);
-  lines.push("Thank you for visiting!");
-  const text = encodeURIComponent(lines.join("\n"));
-  let digits = customer.contact.replace(/\D/g,"");
-  if (digits.length===10) digits = "91"+digits;
-  window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
+document.getElementById("postSavePrint").addEventListener("click", ()=>{ if (lastSavedBill) printBill(lastSavedBill); });
+document.getElementById("postSaveWhatsapp").addEventListener("click", ()=>{ if (lastSavedBill) sendBillOnWhatsapp(lastSavedBill); });
+document.getElementById("postSaveNewBill").addEventListener("click", ()=>{
+  document.getElementById("postSaveOverlay").classList.remove("active");
+  customer = { name:"", contact:"", isGuest:true };
+  showView("start");
 });
 
 /* ---------------------------------------------------------------------
@@ -979,6 +1070,29 @@ document.getElementById("repRange").addEventListener("change", e=>{
   document.getElementById("repTo").style.display = custom ? "inline-block":"none";
 });
 document.getElementById("btnRunReport").addEventListener("click", runReport);
+
+document.getElementById("btnClearAllBills").addEventListener("click", async ()=>{
+  const pwd = prompt("Enter clearance password to permanently delete ALL bills:");
+  if (pwd === null) return;
+  if (pwd !== CLEAR_PASSWORD){ alert("Incorrect password."); return; }
+  if (!confirm("This will permanently delete ALL saved bills and reset numbering to #1001. This cannot be undone. Continue?")) return;
+  const btn = document.getElementById("btnClearAllBills");
+  btn.disabled = true; btn.textContent = "Clearing...";
+  try{
+    const snap = await getDocs(collection(db, COL_BILLS));
+    const deletions = [];
+    snap.forEach(d=> deletions.push(deleteDoc(doc(db, COL_BILLS, d.id))));
+    await Promise.all(deletions);
+    await setDoc(doc(db, DOC_COUNTER), { next: 1001 });
+    alert("All bills cleared. Bill numbering reset to #1001.");
+    runReport();
+  } catch(err){
+    console.error(err);
+    alert("Could not clear bills — check console for details.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Clear All Bills";
+  }
+});
 
 function rangeDates(){
   const mode = document.getElementById("repRange").value;
