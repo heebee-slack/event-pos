@@ -207,6 +207,33 @@
   .oh-detail.open{display:block;}
   .oh-actions{display:flex; gap:8px; margin-top:10px;}
 
+  /* ---------- KDS ---------- */
+  .kds-hd{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;}
+  .kds-hd h2{font-size:1.4rem;}
+  #kdsLiveDot{color:var(--green-dark); font-size:0.65rem;}
+  .kds-section-title{font-family:'Space Mono',monospace; font-size:0.68rem; letter-spacing:2.5px; text-transform:uppercase; color:var(--text3); margin:22px 0 12px;}
+  .kds-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px;}
+  .kds-empty{font-size:0.82rem; color:var(--text3); font-style:italic; padding:10px 0;}
+  .kds-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2); padding:16px; box-shadow:var(--shadow);}
+  .kds-card.all-done{opacity:0.6;}
+  .kds-card-hd{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border2);}
+  .kds-card-hd .who{font-weight:700; font-size:1rem;}
+  .kds-card-hd .meta{font-size:0.7rem; color:var(--text3); font-family:'Space Mono',monospace; margin-top:2px;}
+  .kds-billno{font-family:'Space Mono',monospace; font-size:0.85rem; font-weight:700; background:var(--card); padding:3px 10px; border-radius:6px;}
+  .kds-dish{padding:10px 0; border-bottom:1px dashed var(--border2);}
+  .kds-dish:last-child{border-bottom:none;}
+  .kds-dish-top{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .kds-dish-name{font-size:0.92rem; font-weight:600;}
+  .kds-dish-addons{font-size:0.74rem; color:var(--text3); margin-top:2px;}
+  .kds-status{font-family:'Space Mono',monospace; font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; padding:4px 9px; border-radius:20px;}
+  .kds-status.pending{background:var(--danger-bg); color:var(--danger);}
+  .kds-status.preparing{background:#fdf1d6; color:#a4780a;}
+  .kds-status.complete{background:#e2ead4; color:var(--green-dark);}
+  .kds-dish-btn{padding:10px 16px; border-radius:10px; border:none; font-weight:700; font-size:0.78rem; letter-spacing:1px; text-transform:uppercase; cursor:pointer; min-height:44px;}
+  .kds-dish-btn.start{background:var(--btn-bg); color:var(--btn-fg);}
+  .kds-dish-btn.complete{background:var(--green); color:var(--green-fg);}
+  .kds-undo{background:none; border:none; color:var(--text3); font-size:0.68rem; text-decoration:underline; cursor:pointer; padding:0; margin-top:4px;}
+
   ::-webkit-scrollbar{width:6px; height:6px;}
   ::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
 
@@ -237,6 +264,7 @@
     <button class="navtab" data-nav="manageMenu">Manage Menu</button>
     <button class="navtab" data-nav="reports">Reports</button>
     <button class="navtab" data-nav="orderHistory">Order History</button>
+    <button class="navtab" data-nav="kds">KDS</button>
   </div>
 </div>
 
@@ -384,6 +412,18 @@
     <div id="ohList"></div>
   </div>
 
+  <!-- KDS VIEW -->
+  <div class="view" id="view-kds">
+    <div class="kds-hd">
+      <h2>Kitchen Display</h2>
+      <span class="label" id="kdsLiveDot">● LIVE</span>
+    </div>
+    <h3 class="kds-section-title">Active Orders</h3>
+    <div id="kdsActive" class="kds-grid"></div>
+    <h3 class="kds-section-title">Completed</h3>
+    <div id="kdsCompleted" class="kds-grid"></div>
+  </div>
+
 </div>
 
 <!-- ADDON MODAL -->
@@ -455,7 +495,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, runTransaction,
-  query, where, orderBy, getDocs, Timestamp
+  query, where, orderBy, getDocs, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* =====================================================================
@@ -600,6 +640,7 @@ function showView(name){
   if (name === "manageMenu") enterGated("manageMenu");
   if (name === "reports") enterGated("reports");
   if (name === "orderHistory") renderOrderHistory();
+  if (name === "kds") startKDSListener();
 }
 document.querySelectorAll(".navtab").forEach(tab=>{
   tab.addEventListener("click", ()=>{
@@ -952,7 +993,7 @@ document.getElementById("btnFinishBill").addEventListener("click", async ()=>{
       location: snapshot.location,
       gstin: SETTINGS.gstin,
       businessName: SETTINGS.businessName,
-      items: snapshot.items,
+      items: snapshot.items.map(it=>({ ...it, status:"pending" })),
       subtotal: snapshot.subtotal, cgst: snapshot.cgst, sgst: snapshot.sgst, total: snapshot.total,
       createdAt: Timestamp.now()
     };
@@ -1527,6 +1568,123 @@ function reorderBill(b){
   document.getElementById("billLocation").value = b.location || savedLoc;
   renderMenu(); renderBillPanel();
   showView("billing");
+}
+
+/* ---------------------------------------------------------------------
+   KDS (Kitchen Display)
+   --------------------------------------------------------------------- */
+let kdsUnsubscribe = null;
+let kdsBillsCache = [];
+function startKDSListener(){
+  if (kdsUnsubscribe) { renderKDS(kdsBillsCache); return; }
+  const q = query(collection(db, COL_BILLS), orderBy("createdAt","asc"));
+  kdsUnsubscribe = onSnapshot(q, snap=>{
+    const bills = [];
+    snap.forEach(d=> bills.push({ id:d.id, ...d.data() }));
+    kdsBillsCache = bills;
+    renderKDS(bills);
+  }, err=>{
+    console.error(err);
+    document.getElementById("kdsActive").innerHTML = `<div class="kds-empty">Could not load live orders — check connection.</div>`;
+  });
+}
+function dishDone(it){ return (it.status||"pending") === "complete"; }
+function renderKDS(bills){
+  const active = bills.filter(b=> (b.items||[]).some(it=> !dishDone(it)));
+  const completed = bills.filter(b=> (b.items||[]).length && (b.items||[]).every(it=> dishDone(it))).slice().reverse();
+
+  const activeEl = document.getElementById("kdsActive");
+  activeEl.innerHTML = "";
+  if (!active.length) activeEl.innerHTML = `<div class="kds-empty">No active orders — all caught up.</div>`;
+  active.forEach(b=> activeEl.appendChild(buildKDSCard(b, false)));
+
+  const completedEl = document.getElementById("kdsCompleted");
+  completedEl.innerHTML = "";
+  if (!completed.length) completedEl.innerHTML = `<div class="kds-empty">Nothing completed yet.</div>`;
+  completed.slice(0, 30).forEach(b=> completedEl.appendChild(buildKDSCard(b, true)));
+}
+function buildKDSCard(b, isDone){
+  const card = document.createElement("div");
+  card.className = "kds-card" + (isDone ? " all-done" : "");
+  const d = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate() : new Date();
+  const hd = document.createElement("div");
+  hd.className = "kds-card-hd";
+  hd.innerHTML = `
+    <div>
+      <div class="who">${escapeHtml(b.isGuest ? "Guest" : (b.customerName||"Guest"))}</div>
+      <div class="meta">${d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}${b.location ? " · "+escapeHtml(b.location) : ""}</div>
+    </div>
+    <span class="kds-billno">#${b.billNo}</span>
+  `;
+  card.appendChild(hd);
+  (b.items||[]).forEach((it, idx)=>{
+    const status = it.status || "pending";
+    const row = document.createElement("div");
+    row.className = "kds-dish";
+    row.innerHTML = `
+      <div class="kds-dish-top">
+        <div>
+          <div class="kds-dish-name">${it.qty}x ${escapeHtml(it.name)}${escapeHtml(tagTextShort(it.tags))}</div>
+          ${it.addons&&it.addons.length ? `<div class="kds-dish-addons">${escapeHtml(it.addons.map(a=>a.name).join(", "))}</div>` : ""}
+        </div>
+        <div data-role="statusArea"></div>
+      </div>
+    `;
+    const statusArea = row.querySelector('[data-role="statusArea"]');
+    paintDishStatus(statusArea, b.id, idx, status);
+    card.appendChild(row);
+  });
+  return card;
+}
+function paintDishStatus(container, billId, itemIdx, status){
+  container.innerHTML = "";
+  if (status === "pending"){
+    const btn = document.createElement("button");
+    btn.className = "kds-dish-btn start";
+    btn.textContent = "Start Preparing";
+    btn.addEventListener("click", ()=>{ btn.disabled = true; updateItemStatus(billId, itemIdx, "preparing"); });
+    container.appendChild(btn);
+  } else if (status === "preparing"){
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex; flex-direction:column; align-items:flex-end; gap:4px;";
+    const pill = document.createElement("span");
+    pill.className = "kds-status preparing";
+    pill.textContent = "Preparing";
+    const btn = document.createElement("button");
+    btn.className = "kds-dish-btn complete";
+    btn.textContent = "Complete";
+    btn.addEventListener("click", ()=>{ btn.disabled = true; updateItemStatus(billId, itemIdx, "complete"); });
+    wrap.appendChild(pill);
+    wrap.appendChild(btn);
+    container.appendChild(wrap);
+  } else {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex; flex-direction:column; align-items:flex-end;";
+    const pill = document.createElement("span");
+    pill.className = "kds-status complete";
+    pill.textContent = "✓ Done";
+    const undo = document.createElement("button");
+    undo.className = "kds-undo";
+    undo.textContent = "Undo";
+    undo.addEventListener("click", ()=> updateItemStatus(billId, itemIdx, "preparing"));
+    wrap.appendChild(pill);
+    wrap.appendChild(undo);
+    container.appendChild(wrap);
+  }
+}
+async function updateItemStatus(billId, itemIdx, newStatus){
+  const ref = doc(db, COL_BILLS, billId);
+  try{
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const items = snap.data().items.map((it,i)=> i===itemIdx ? { ...it, status:newStatus } : it);
+      tx.update(ref, { items });
+    });
+  } catch(err){
+    console.error(err);
+    alert("Could not update dish status — check connection.");
+  }
 }
 
 /* ---------------------------------------------------------------------
